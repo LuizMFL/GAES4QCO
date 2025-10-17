@@ -1,5 +1,5 @@
 from analysis.loader import JsonDataLoader
-from analysis.plotter import EvolutionPlotter, AggregatePlotter
+from analysis.plotter import EvolutionPlotter, AggregatePlotter, FidelityDepthPlotter
 from pathlib import Path
 import glob
 import json
@@ -37,6 +37,7 @@ def main():
     loader = JsonDataLoader()
     single_plotter = EvolutionPlotter()
     aggregate_plotter = AggregatePlotter()
+    fidelity_plotter = FidelityDepthPlotter()
 
     grouped_results = {}
 
@@ -67,6 +68,9 @@ def main():
 
             # === Gera gráfico com informações de configuração ===
             single_plotter.plot(result_data, str(output_filename), config_info=config_info)
+
+            fidelity_output = plots_dir / f"{name}_fidelity_depth.png"
+            fidelity_plotter.plot(result_data, str(fidelity_output), config_info=config_info)
 
             # === Classifica o teste em um grupo (ex: stepsize, sharing, nsga, normal) ===
             lower_name = name.lower()

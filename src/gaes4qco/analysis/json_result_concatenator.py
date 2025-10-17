@@ -32,21 +32,18 @@ class JsonResultConcatenator:
         Concatena dados de várias phases em um único ResultData contínuo.
         """
         fitness_all = []
-        avg_all = []
-        std_all = []
         diversity_all = []
-
+        fidelity_all = []
         for rd in result_data_list:
             fitness_all.extend(rd.fitness_per_generation)
-            avg_all.extend(rd.average_fitness_per_generation)
-            std_all.extend(rd.std_dev_fitness_per_generation)
             diversity_all.extend(rd.structural_diversity_per_generation)
+            fidelity_all.extend(rd.fidelity_per_generation)
 
         return ResultData(
             fitness_per_generation=fitness_all,
-            average_fitness_per_generation=avg_all,
-            std_dev_fitness_per_generation=std_all,
-            structural_diversity_per_generation=diversity_all
+            structural_diversity_per_generation=diversity_all,
+            fidelity_per_generation=fidelity_all,
+            depth_per_generation=[]
         )
 
     def process_single_test(self, config: ExperimentConfig, test_filename: str) -> Path:
@@ -71,9 +68,8 @@ class JsonResultConcatenator:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump({
                 "fitness_per_generation": concatenated.fitness_per_generation,
-                "average_fitness_per_generation": concatenated.average_fitness_per_generation,
-                "std_dev_fitness_per_generation": concatenated.std_dev_fitness_per_generation,
-                "structural_diversity_per_generation": concatenated.structural_diversity_per_generation
+                "structural_diversity_per_generation": concatenated.structural_diversity_per_generation,
+                "fidelity_per_generation": concatenated.fidelity_per_generation,
             }, f, indent=4)
 
         print(f"✅ Resultado concatenado salvo em: {output_path.name}")

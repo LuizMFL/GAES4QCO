@@ -13,7 +13,7 @@ class JsonDataLoader(IDataLoader):
 
         return ResultData(
             fitness_per_generation=data["fitness_per_generation"],
-            average_fitness_per_generation=data["average_fitness_per_generation"],
-            std_dev_fitness_per_generation=data["std_dev_fitness_per_generation"],
-            structural_diversity_per_generation=data["structural_diversity_per_generation"]
+            structural_diversity_per_generation=data["structural_diversity_per_generation"],
+            fidelity_per_generation=data["fidelity_per_generation"],
+            depth_per_generation=[]
         )
