@@ -52,15 +52,10 @@ class Optimizer:
 
         print("Evaluating initial population...")
         self._evaluate_population(current_population)
-
         for gen in range(max_generations):
             if self._observer:
                 self._observer.update(gen, current_population)
             current_diversity = current_population.calculate_structural_diversity()
-            if current_diversity < self._diversity_threshold:
-                print(f"  -> Low diversity detected ({current_diversity:.4f}). Injecting fresh individuals.")
-                self._inject_fresh_blood(current_population)
-
             current_rates = self._rate_adapter.adapt(current_diversity)
             self._crossover.crossover_rate = current_rates.crossover_rate
             self._mutation.mutation_rate = current_rates.mutation_rate
@@ -89,6 +84,7 @@ class Optimizer:
                     break
 
         if self._observer:
+            self._observer.update(max_generations, current_population)
             self._observer.save()
 
         return current_population
@@ -102,26 +98,3 @@ class Optimizer:
             if individual.fitness == 0.0:  # Assume 0.0 como não avaliado
                 individual.fitness, individual.fidelity = self._fitness_evaluator.evaluate(individual)
         self._fitness_shaper.shape(population)
-
-    def _inject_fresh_blood(self, population: Population):
-        """Substitui os piores indivíduos por novos indivíduos aleatórios."""
-        num_to_inject = int(len(population) * self._injection_rate)
-        if num_to_inject == 0 or not population:
-            return
-
-        sample_ind = population.get_individuals()[0]
-        min_depth = max(1, sample_ind.depth // 2)
-
-        new_individuals_pop = self._population_factory.create(
-            population_size=num_to_inject,
-            num_qubits=sample_ind.count_qubits,
-            max_depth=sample_ind.depth,
-            min_depth=min_depth
-        )
-        self._evaluate_population(new_individuals_pop)
-
-        individuals = population.get_individuals()
-        individuals.sort(key=lambda ind: ind.fitness)  # Ordena do pior para o melhor
-
-        # Substitui os piores pelos novos
-        individuals[:num_to_inject] = new_individuals_pop.get_individuals()

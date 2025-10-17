@@ -15,5 +15,5 @@ class JsonDataLoader(IDataLoader):
             fitness_per_generation=data["fitness_per_generation"],
             structural_diversity_per_generation=data["structural_diversity_per_generation"],
             fidelity_per_generation=data["fidelity_per_generation"],
-            depth_per_generation=[]
+            depth_per_generation=data.get("depth_per_generation", [])
         )

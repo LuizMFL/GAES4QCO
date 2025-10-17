@@ -38,7 +38,7 @@ class ResultData:
     @property
     def best_fitness_per_generation(self) -> List[float]:
         """Melhor fidelidade (máximo) de cada geração."""
-        return [max(gen) if gen else 0.0 for gen in self.fitness_per_generation]
+        return [gen[0] if gen else 0.0 for gen in self.fitness_per_generation]
 
 
     @property
@@ -60,7 +60,7 @@ class ResultData:
     @property
     def best_fidelity_per_generation(self) -> List[float]:
         """Melhor fidelidade (máximo) de cada geração."""
-        return [max(gen) if gen else 0.0 for gen in self.fidelity_per_generation]
+        return [gen[0] if gen else 0.0 for gen in self.fidelity_per_generation]
 
 
     @property
@@ -70,6 +70,14 @@ class ResultData:
             return []
         return [
             float(np.mean(gen)) if gen else 0.0
+            for gen in self.depth_per_generation
+        ]
+
+    @property
+    def std_dev_depth_per_generation(self) -> List[float]:
+        """Desvio padrão da fidelidade entre os indivíduos de cada geração."""
+        return [
+            float(np.std(gen, ddof=0)) if gen else 0.0
             for gen in self.depth_per_generation
         ]
 

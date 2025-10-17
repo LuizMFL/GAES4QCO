@@ -34,16 +34,18 @@ class JsonResultConcatenator:
         fitness_all = []
         diversity_all = []
         fidelity_all = []
+        depth_all = []
         for rd in result_data_list:
             fitness_all.extend(rd.fitness_per_generation)
             diversity_all.extend(rd.structural_diversity_per_generation)
             fidelity_all.extend(rd.fidelity_per_generation)
+            depth_all.extend(rd.depth_per_generation)
 
         return ResultData(
             fitness_per_generation=fitness_all,
             structural_diversity_per_generation=diversity_all,
             fidelity_per_generation=fidelity_all,
-            depth_per_generation=[]
+            depth_per_generation=depth_all
         )
 
     def process_single_test(self, config: ExperimentConfig, test_filename: str) -> Path:
@@ -70,6 +72,7 @@ class JsonResultConcatenator:
                 "fitness_per_generation": concatenated.fitness_per_generation,
                 "structural_diversity_per_generation": concatenated.structural_diversity_per_generation,
                 "fidelity_per_generation": concatenated.fidelity_per_generation,
+                "depth_per_generation": concatenated.depth_per_generation
             }, f, indent=4)
 
         print(f"✅ Resultado concatenado salvo em: {output_path.name}")

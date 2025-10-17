@@ -19,13 +19,17 @@ class EvolutionPlotter(IPlotter):
         print(f"Gerando gráfico em {output_path}...")
 
         generations = range(data.generation_count)
-        avg_fitness = _clip(np.array(data.average_fitness_per_generation))
-        std_dev = np.array(data.std_dev_fitness_per_generation)
-        best_fitness = _clip(np.array(data.best_fitness_per_generation))
-        diversity = _clip(np.array(data.structural_diversity_per_generation))
 
-        lower_fill = _clip(avg_fitness - std_dev)
-        upper_fill = _clip(avg_fitness + std_dev)
+        # === Fitness ===
+        avg_fit = _clip(np.array(data.average_fitness_per_generation))
+        std_fit = np.array(data.std_dev_fitness_per_generation)
+        best_fit = _clip(np.array(data.best_fitness_per_generation))
+
+        lower_fit = _clip(avg_fit - std_fit)
+        upper_fit = _clip(avg_fit + std_fit)
+
+        # === Diversity ===
+        diversity = _clip(np.array(data.structural_diversity_per_generation))
 
         # === Layout com área inferior extra ===
         fig = plt.figure(figsize=(14, 9))
@@ -36,13 +40,13 @@ class EvolutionPlotter(IPlotter):
         color = 'tab:blue'
         ax1.set_xlabel('Geração')
         ax1.set_ylabel('Fitness', color=color)
-        ax1.plot(generations, best_fitness, color=color, linestyle='-', label='Melhor Fitness')
-        ax1.plot(generations, avg_fitness, color=color, linestyle='--', label='Fitness Médio')
-        ax1.fill_between(generations, lower_fill, upper_fill, alpha=0.25, color=color)
+        ax1.plot(generations, best_fit, color=color, linestyle='-', label='Melhor Fitness')
+        ax1.plot(generations, avg_fit, color=color, linestyle='--', label='Fitness Médio')
+        ax1.fill_between(generations, lower_fit, upper_fit, alpha=0.25, color=color)
         ax1.tick_params(axis='y', labelcolor=color)
         ax1.grid(True, which='both', linestyle=':', linewidth=0.5)
-        ax1.set_ylim(0, 1.05)
-        ax1.set_xlim(0, data.generation_count - 1)
+        ax1.set_ylim(0, 1)
+        ax1.set_xlim(0, data.generation_count)
 
         # --- Eixo secundário: Diversidade ---
         ax2 = ax1.twinx()
@@ -50,7 +54,7 @@ class EvolutionPlotter(IPlotter):
         ax2.set_ylabel('Diversidade Estrutural', color=color)
         ax2.plot(generations, diversity, color=color, linestyle='-.', label='Diversidade')
         ax2.tick_params(axis='y', labelcolor=color)
-        ax2.set_ylim(0, 1.05)
+        ax2.set_ylim(0, 1)
 
         # --- Marcação visual das fases ---
         if config_info and "phases" in config_info:
@@ -239,13 +243,11 @@ class FidelityDepthPlotter(IPlotter):
 
         # === Profundidade (pode estar ausente) ===
         avg_depth = np.array(data.average_depth_per_generation or np.zeros_like(avg_fid))
+        std_depth = np.array(data.std_dev_depth_per_generation or np.zeros_like(std_fid))
         best_depth = np.array(data.max_depth_per_generation or np.zeros_like(avg_fid))
-        std_depth = np.array([
-            np.std(g) if g else 0.0 for g in (data.depth_per_generation or [[]] * len(avg_fid))
-        ])
 
-        lower_depth = np.maximum(0.0, avg_depth - std_depth)
-        upper_depth = avg_depth + std_depth
+        lower_depth = np.maximum(config_info["min_depth"], avg_depth - std_depth)
+        upper_depth = np.minimum(config_info["max_depth"], avg_depth + std_depth)
 
         # === Layout ===
         fig = plt.figure(figsize=(14, 9))
@@ -256,23 +258,24 @@ class FidelityDepthPlotter(IPlotter):
         color_fid = '#1f77b4'  # azul científico (fitness-like)
         ax1.set_xlabel("Geração")
         ax1.set_ylabel("Fidelidade", color=color_fid)
-        ax1.plot(generations, best_fid, color=color_fid, linestyle='-', linewidth=1.8, label="Melhor Fidelidade")
-        ax1.plot(generations, avg_fid, color=color_fid, linestyle='--', linewidth=1.3, label="Fidelidade Média")
-        ax1.fill_between(generations, lower_fid, upper_fid, alpha=0.2, color=color_fid)
+        ax1.plot(generations, best_fid, color=color_fid, linestyle='-', label="Melhor Fidelidade")
+        ax1.plot(generations, avg_fid, color=color_fid, linestyle='--', label="Fidelidade Média")
+        ax1.fill_between(generations, lower_fid, upper_fid, alpha=0.25, color=color_fid)
         ax1.tick_params(axis='y', labelcolor=color_fid)
-        ax1.grid(True, linestyle=":", linewidth=0.5)
-        ax1.set_ylim(0, 1.05)
-        ax1.set_xlim(0, data.generation_count - 1)
+        ax1.grid(True, which='both', linestyle=":", linewidth=0.5)
+        ax1.set_ylim(0, 1)
+        ax1.set_xlim(0, data.generation_count)
 
         # === Profundidade (eixo secundário) ===
         ax2 = ax1.twinx()
         color_depth = '#9467bd'  # roxo sutil
         ax2.set_ylabel("Profundidade Estrutural", color=color_depth)
-        ax2.plot(generations, best_depth, color=color_depth, linestyle='-', linewidth=1.6, label="Maior Profundidade")
-        ax2.plot(generations, avg_depth, color=color_depth, linestyle='--', linewidth=1.2, label="Profundidade Média")
-        ax2.fill_between(generations, lower_depth, upper_depth, alpha=0.15, color=color_depth)
+        ax2.plot(generations, best_depth, color=color_depth, linestyle='-', label="Maior Profundidade")
+        ax2.plot(generations, avg_depth, color=color_depth, linestyle='--', label="Profundidade Média")
+        ax2.fill_between(generations, lower_depth, upper_depth, alpha=0.25, color=color_depth)
         ax2.tick_params(axis='y', labelcolor=color_depth)
-        ax2.set_ylim(0, np.max(upper_depth) * 1.1 if np.max(upper_depth) > 0 else 1)
+        ax2.grid(True, which='both', linestyle=":", linewidth=0.5)
+        ax2.set_ylim(config_info["min_depth"], config_info["max_depth"])
 
         # === Marcação das Phases ===
         if config_info and "phases" in config_info:
