@@ -19,10 +19,7 @@ class ParallelExperimentManager:
 
     def run_all(self) -> List[dict]:
         """Executa todos os experimentos configurados usando um pool de processos."""
-        num_experiments = len(self.configs)
-        num_processes = min(num_experiments, self.max_processes)  # Usa no máximo os CPUs disponíveis
-
-        print(f"Iniciando {num_experiments} experimentos em {num_processes} processos paralelos...")
+        print(f"Iniciando {len(self.configs)} experimentos em {self.max_processes} processos paralelos...")
         start_time = time.time()
         experiments = []
         for i, cfg in enumerate(self.configs):
@@ -31,7 +28,7 @@ class ParallelExperimentManager:
             runner = self.experiment_container.runner()
             experiments.append((runner, self.filenames[i]))
 
-        with Pool(num_processes) as pool:
+        with Pool(self.max_processes) as pool:
             # Usa starmap para passar cada objeto de configuração para a função de execução
             results = pool.starmap(run_experiment, experiments)
 

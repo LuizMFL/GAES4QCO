@@ -40,7 +40,8 @@ def save_final_population(circuits: List[Circuit], adapter: IQuantumCircuitAdapt
         # Ordena por fitness para que o arquivo 0 seja o melhor
         circuits.sort(key=lambda c: c.fitness, reverse=True)
         # O nome do arquivo inclui o rank, fitness e profundidade para fácil identificação
-        basename = f"rank_{i:03d}_fit_{circuit.fitness:.4f}_depth_{circuit.depth}"
+        basename = f"rank_{i:03d}_fit_{circuit.fitness:.4f}_fid_{circuit.fidelity:.4f}_depth_{circuit.depth}"
+
         filepath_base = str(folder_path / basename)
         save_circuit_details(circuit, adapter, filepath_base)
 
