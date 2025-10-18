@@ -62,7 +62,7 @@ class OptimizationContainer(containers.DeclarativeContainer):
         ),
         default=providers.Factory(
             fitness_shaper.NullFitnessShaper
-        ),
+        )
     )
 
     observer = providers.Factory(

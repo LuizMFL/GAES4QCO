@@ -1,3 +1,5 @@
+import numpy as np
+
 from qiskit.quantum_info import Statevector, state_fidelity
 from quantum_circuit.circuit import Circuit
 from quantum_circuit.interfaces import IQuantumExecutor
@@ -17,31 +19,28 @@ class ErrorAnalyzer:
         """
         # Estado com maior probabilidade no target
         ideal_probs = target_statevector.probabilities_dict()
-        print(ideal_probs)
         #correct_state_str = max(ideal_probs, key=ideal_probs.get)
         # Executa o circuito
-        result = self._executor.execute(circuit, shots, measure=False)
-        print(result)
-        # Se o resultado for counts (dict)
-        errors_rates = []
+        result = self._executor.execute(circuit, shots, measure=True)
         if isinstance(result, dict):
-            for key in ideal_probs.keys():
-                print(key)
-                correct_counts = result.get(key, 0)
-                success_probability = correct_counts / shots
-                success = abs(success_probability - ideal_probs[key])
-                error_rate = abs(1.0 - success_probability)
-                print(f"[Simulador] Estado correto: '{key}' ocorreu {correct_counts}/{shots} vezes")
-                print(f"Probabilidade de sucesso: {success_probability:.10%}, Taxa de erro: {error_rate:.2%}")
-                errors_rates.append(error_rate)
-                # Se o resultado for statevector
-            return sum(errors_rates)/len(errors_rates)
-        elif isinstance(result, Statevector):
-            # Probabilidade de medir o estado correto
-            success_probability = state_fidelity(result, target_statevector)
-            error_rate = 1.0 - success_probability
-            print(f"Probabilidade de sucesso: {success_probability:.2%}, Taxa de erro: {error_rate:.2%}")
-            return error_rate
+            # Distribuição observada (normalizada)
+            measured_probs = {k: v / shots for k, v in result.items()}
 
+            # Garante que todos os estados do ideal estão presentes em measured_probs
+            all_states = set(ideal_probs.keys()) | set(measured_probs.keys())
+            p = np.array([ideal_probs.get(k, 0.0) for k in all_states])
+            q = np.array([measured_probs.get(k, 0.0) for k in all_states])
+
+            # ---- TAXA DE ERRO GLOBAL: Total Variation Distance ----
+            total_variation = 0.5 * np.sum(np.abs(p - q))
+            error_rate = total_variation
+
+            print(f"[Simulador] TV distance = {total_variation:.4f} → Erro global = {error_rate:.2%}")
+            return float(error_rate)
+        elif isinstance(result, Statevector):
+            fidelity = state_fidelity(result, target_statevector)
+            error_rate = 1.0 - fidelity
+            print(f"Fidelidade: {fidelity:.4f} → Erro global = {error_rate:.2%}")
+            return float(error_rate)
         else:
             raise TypeError(f"Executor retornou tipo inesperado: {type(result)}")
