@@ -86,7 +86,5 @@ class Circuit:
         """
         return Circuit(
             count_qubits=self.count_qubits,
-            columns=[col.copy() for col in self.columns],
-            fitness=self.fitness,
-            fidelity=self.fidelity
+            columns=[col.copy() for col in self.columns]
         )

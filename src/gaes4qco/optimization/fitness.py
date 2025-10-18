@@ -27,8 +27,6 @@ class FidelityFitnessEvaluator(IFitnessEvaluator):
         # ## O cálculo de fidelidade do Qiskit é realizado aqui
         solution_sv = Statevector.from_instruction(qiskit_circuit)
         fidelity = state_fidelity(solution_sv, self._target_sv)
-        circuit.fidelity = fidelity
-        circuit.fitness = fidelity
         return max(0.0, fidelity), fidelity
 
 
@@ -49,9 +47,6 @@ class WeightedFidelityFitnessEvaluator(IFitnessEvaluator):
         solution_sv = Statevector.from_instruction(qiskit_circuit)
         fidelity = state_fidelity(solution_sv, self._target_sv)
 
-        # 2. Armazena a fidelidade pura no objeto do circuito
-        circuit.fidelity = fidelity
-
         # 3. Calcula a penalidade de profundidade
         depth_ratio = circuit.depth / self._target_depth if self._target_depth > 0 else circuit.depth
 
@@ -66,5 +61,4 @@ class WeightedFidelityFitnessEvaluator(IFitnessEvaluator):
 
         # 4. O fitness final é a fidelidade ponderada pela penalidade de profundidade
         final_fitness = fidelity * depth_penalty
-        circuit.fitness = max(0.0, final_fitness)
         return max(0.0, final_fitness), fidelity

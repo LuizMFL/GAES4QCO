@@ -14,7 +14,7 @@ from .config import ExperimentConfig, PhaseConfig
 
 def save_circuit_details(circuit: Circuit, adapter: IQuantumCircuitAdapter, filepath_base: str):
     """Salva a estrutura de um circuito em .json e sua representação em .txt."""
-    print(f"Salvando detalhes do circuito em '{filepath_base}.json/.txt'...")
+    #print(f"Salvando detalhes do circuito em '{filepath_base}.json/.txt'...")
 
     with open(f"{filepath_base}.json", 'w', encoding='utf-8') as f:
         json.dump(circuit.to_dict(), f, indent=4)

@@ -50,7 +50,7 @@ class OptimizationContainer(containers.DeclarativeContainer):
             fitness.FidelityFitnessEvaluator,
             target_statevector=target_statevector,
             circuit_adapter=gateways.qiskit_adapter
-        ),
+        )
     )
 
     shaper = providers.Selector(
@@ -122,32 +122,29 @@ class EvolutionaryAlgorithmContainer(containers.DeclarativeContainer):
         )
     )
 
-    singlepoint_crossover = providers.Factory(
-        crossover.SinglePointCrossover
-    )
-    multipoint_crossover = providers.Factory(
-        crossover.MultiPointCrossover
-    )
-    blockwise_crossover = providers.Factory(
-        crossover.BlockwiseCrossover,
-        gate_factory=factories.gate_factory
-    )
-    crossover_strategy_selector = providers.Selector(
+    _crossover_strategy_selector = providers.Selector(
         config.selection_strategy.crossover,
-        singlepoint=singlepoint_crossover,
-        multipoint=multipoint_crossover,
-        blockwise=blockwise_crossover,
+        singlepoint=providers.Factory(
+            crossover.SinglePointCrossover
+        ),
+        multipoint=providers.Factory(
+            crossover.MultiPointCrossover
+        ),
+        blockwise=providers.Factory(
+            crossover.BlockwiseCrossover,
+            gate_factory=factories.gate_factory
+        )
     )
 
     # --- Estratégia de Crossover ---
     crossover_population = providers.Factory(
         crossover.PopulationCrossover,
-        crossover_strategy=crossover_strategy_selector,
+        crossover_strategy=_crossover_strategy_selector,
         crossover_rate=config.evolution.crossover_rate
     )
 
     # --- Estratégias de Mutação ---
-    mutation_pool = providers.List(
+    _mutation_pool = providers.List(
         providers.Factory(mutation.SwapColumnsMutation),
         providers.Factory(
             mutation.SingleGateFlipMutation,
@@ -172,13 +169,13 @@ class EvolutionaryAlgorithmContainer(containers.DeclarativeContainer):
         config.selection_strategy.mutation,
         bandit=providers.Factory(
             mutation.BanditMutationSelector,
-            mutation_strategies=mutation_pool,
+            mutation_strategies=_mutation_pool,
             mutation_rate=config.evolution.mutation_rate,
             fitness_evaluator=optimization.evaluator
         ),
         default=providers.Factory(
             mutation.RandomMutationSelector,
-            mutation_strategies=mutation_pool,
+            mutation_strategies=_mutation_pool,
             mutation_rate=config.evolution.mutation_rate
         ),
     )
@@ -206,8 +203,6 @@ class AppContainer(containers.DeclarativeContainer):
     Container principal que agrega todos os sub-containers da aplicação.
     """
     config = providers.Configuration()
-
-    # O CheckpointManager depende da configuração do experimento
 
     # --- Agregação dos Sub-Containers ---
 

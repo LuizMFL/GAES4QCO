@@ -55,6 +55,7 @@ class MultiPointCrossover(ICrossoverStrategy):
         num_qubits = parent_1.count_qubits
         return Circuit(num_qubits, child1_cols), Circuit(num_qubits, child2_cols)
 
+
 class BlockwiseCrossover(ICrossoverStrategy):
     """
     2D crossover that splits parents by a column and a qubit.
@@ -103,7 +104,6 @@ class BlockwiseCrossover(ICrossoverStrategy):
             child_cols.append(Column(new_col_gates))
 
         return Circuit(num_qubits, child_cols)
-
 
 
 class SinglePointCrossover(ICrossoverStrategy):
