@@ -57,8 +57,6 @@ class Circuit:
                 gene = (
                     gate.gate_class.__name__,
                     qubits_tuple,
-                    gate.extra_controls,
-                    gate.is_inverse,
                     i_col
                 )
                 col_repr.append(gene)

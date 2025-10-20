@@ -15,15 +15,11 @@ class Gate:
         qubits: List[int],
         parameters: Optional[List[float]] = None,
         steps_sizes: Optional[List[StepSize]] = None,
-        extra_controls: int = 0,
-        is_inverse: bool = False
     ) -> None:
         self.gate_class = gate_class
         self.qubits = qubits
         self.parameters = parameters if parameters is not None else []
         self.steps_sizes = steps_sizes if steps_sizes is not None else []
-        self.extra_controls = extra_controls
-        self.is_inverse = is_inverse
 
     def __eq__(self, other):
         if not isinstance(other, Gate):
@@ -31,9 +27,7 @@ class Gate:
         return (self.gate_class == other.gate_class and
                 self.parameters == other.parameters and
                 self.qubits == other.qubits and
-                self.steps_sizes == other.steps_sizes and
-                self.extra_controls == other.extra_controls and
-                self.is_inverse == other.is_inverse)
+                self.steps_sizes == other.steps_sizes)
 
     def to_dict(self) -> dict:
         """Converte o objeto Gate para um dicionário serializável."""
@@ -41,9 +35,7 @@ class Gate:
             "gate_class_name": self.gate_class.__name__,
             "qubits": self.qubits,
             "parameters": self.parameters,
-            "step_sizes": [ss.to_dict() for ss in self.steps_sizes],
-            "extra_controls": self.extra_controls,
-            "is_inverse": self.is_inverse,
+            "step_sizes": [ss.to_dict() for ss in self.steps_sizes]
         }
 
     def copy(self) -> "Gate":
@@ -54,7 +46,5 @@ class Gate:
             gate_class=self.gate_class,
             qubits=list(self.qubits),
             parameters=list(self.parameters),
-            steps_sizes=[ss.copy() for ss in self.steps_sizes],
-            extra_controls=self.extra_controls,
-            is_inverse=self.is_inverse
+            steps_sizes=[ss.copy() for ss in self.steps_sizes]
         )

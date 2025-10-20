@@ -26,8 +26,4 @@ class QiskitAdapter(IQuantumCircuitAdapter):
     def _build_gate_from_domain(self, domain_gate: DomainGate):
         """Helper para construir um único gate."""
         gate_instance = domain_gate.gate_class(*domain_gate.parameters)
-        if domain_gate.extra_controls > 0:
-            gate_instance = gate_instance.control(domain_gate.extra_controls)
-        if domain_gate.is_inverse:
-            gate_instance = gate_instance.inverse()
         return gate_instance, domain_gate.qubits

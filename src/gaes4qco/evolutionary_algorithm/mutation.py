@@ -1,6 +1,9 @@
 import random
 import math
 from typing import List, Optional
+
+from qiskit.circuit import ControlledGate
+
 from .interfaces import IMutationStrategy, IMutationPopulation
 from .population import Population
 from quantum_circuit.circuit import Circuit, Column
@@ -250,32 +253,53 @@ class GateParameterMutation(IMutationStrategy):
 class SwapControlTargetMutation(IMutationStrategy):
     """
     ## Em um gate controlado, troca um qubit de controle por um de alvo.
+
+    Detecta automaticamente gates controlados com base em suas propriedades do Qiskit.
     """
+    CONTROL_GATE_NAMES = {"CXGate", "CCXGate", "MCXGate", "RCCXGate", "RC3XGate", "MCX_GrayGate", "MCX_RecursiveGate"}
+
+    @staticmethod
+    def _get_num_controls(gate):
+        # Permitir receber tanto a classe quanto a instância
+        gate_name = getattr(gate, "__name__", gate.__class__.__name__).lower()
+        # Se for um ControlledGate real (ex: CX, MCX, CRZ, CU3, etc.)
+        if isinstance(gate, ControlledGate):
+            return gate.num_ctrl_qubits
+        # Fallback heurístico para gates compostos
+        if gate_name in ("ccxgate", "rccxgate"):
+            return 2
+        if gate_name in ("rc3xgate", "mcxgate", "mcx_graygate", "mcx_recursivegate"):
+            return 3
+        return 0
 
     def can_apply(self, circuit: Circuit) -> bool:
-        # Aplicável se houver gates com controles extras
-        return any(gate.extra_controls > 0 for col in circuit.columns for gate in col.get_gates())
+        """Verifica se existe pelo menos um gate com qubits de controle."""
+
+        return any(
+            self._get_num_controls(gate.gate_class) > 0
+            for column in circuit.columns
+            for gate in column.get_gates()
+        )
 
     def mutate_individual(self, circuit: Circuit) -> Circuit:
+        """Realiza a mutação trocando um qubit de controle por um de alvo."""
 
         # Encontra todos os gates passíveis de mutação
         mutable_gates = []
         for i_col, col in enumerate(circuit.columns):
             for i_gate, gate in enumerate(col.get_gates()):
-                if gate.extra_controls > 0:
-                    mutable_gates.append((i_col, i_gate))
-
-        # Escolhe um gate
-        i_col, i_gate = random.choice(mutable_gates)
+                num_controls = self._get_num_controls(gate.gate_class)
+                if num_controls > 0:
+                    mutable_gates.append((i_col, i_gate, num_controls))
+        # Escolhe um gate aleatoriamente
+        i_col, i_gate, num_controls = random.choice(mutable_gates)
         target_gate = circuit.columns[i_col].gates[i_gate]
-
-        num_controls = target_gate.extra_controls
 
         # Separa controles e alvos
         control_qubits = target_gate.qubits[:num_controls]
         target_qubits = target_gate.qubits[num_controls:]
 
-        # Escolhe um de cada para trocar
+        # Escolhe um controle e um alvo para trocar
         control_to_swap = random.choice(control_qubits)
         target_to_swap = random.choice(target_qubits)
 
@@ -285,6 +309,8 @@ class SwapControlTargetMutation(IMutationStrategy):
         idx_target = new_qubits.index(target_to_swap)
         new_qubits[idx_control], new_qubits[idx_target] = new_qubits[idx_target], new_qubits[idx_control]
 
+        # Atualiza o gate
         target_gate.qubits = new_qubits
         circuit.columns[i_col].gates[i_gate] = target_gate
+
         return circuit

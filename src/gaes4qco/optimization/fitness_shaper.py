@@ -1,5 +1,6 @@
 from analysis.distance_metrics import StructuralJaccardDistance
-from analysis.interfaces import IDistanceMetric
+
+import numpy as np
 
 from .interfaces import IFitnessShaper
 from evolutionary_algorithm.population import Population
@@ -14,35 +15,58 @@ class NullFitnessShaper(IFitnessShaper):
 
 class FitnessSharingShaper(IFitnessShaper):
     """
-    Ajusta o fitness da população usando a técnica de Fitness Sharing.
-    Penaliza indivíduos que são muito similares a outros.
+    Aplica Fitness Sharing preservando o melhor indivíduo de cada nicho.
     """
 
     def __init__(self, sharing_radius: float, alpha: float):
-        """
-        Args:
-            sharing_radius (float): O raio de nicho (sigma_share). A distância abaixo
-                                    da qual dois indivíduos são considerados do mesmo nicho.
-            alpha (float): Expoente que controla o formato da função de compartilhamento.
-        """
         self._sigma_share = sharing_radius
         self._alpha = alpha
         self._distance_metric = StructuralJaccardDistance()
 
     def shape(self, population: Population):
-        """Ajusta o fitness de cada indivíduo na população."""
         individuals = population.get_individuals()
+        n = len(individuals)
 
-        for i in range(len(individuals)):
-            niche_count = 0
-            for j in range(len(individuals)):
-                distance = self._distance_metric.calculate(individuals[i], individuals[j])
+        # Passo 1: criar matriz de distâncias (simétrica)
+        distances = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i + 1, n):
+                d = self._distance_metric.calculate(individuals[i], individuals[j])
+                distances[i, j] = distances[j, i] = d
 
-                # Calcula a função de compartilhamento
-                if distance < self._sigma_share:
-                    sh = 1 - (distance / self._sigma_share) ** self._alpha
-                    niche_count += sh
+        # Passo 2: identificar nichos (clusters de indivíduos similares)
+        visited = [False] * n
+        niches = []
 
-            # Ajusta o fitness dividindo-o pela contagem do nicho
-            if niche_count > 0:
-                individuals[i].fitness /= niche_count
+        for i in range(n):
+            if visited[i]:
+                continue
+            # Cria um novo nicho e inclui todos os indivíduos próximos
+            niche = [i]
+            visited[i] = True
+            for j in range(n):
+                if not visited[j] and distances[i, j] < self._sigma_share:
+                    niche.append(j)
+                    visited[j] = True
+            niches.append(niche)
+
+        # Passo 3: aplicar penalização dentro de cada nicho
+        for niche in niches:
+            if len(niche) == 1:
+                continue  # nicho unitário → sem penalização
+
+            # Ordenar por fitness (maior primeiro)
+            niche_sorted = sorted(niche, key=lambda idx: individuals[idx].fitness, reverse=True)
+
+            best_idx = niche_sorted[0]  # melhor do nicho → preservado
+
+            for idx in niche_sorted[1:]:  # os demais sofrem penalização
+                niche_count = 0
+                for jdx in niche:
+                    d = distances[idx, jdx]
+                    if d < self._sigma_share:
+                        sh = 1 - (d / self._sigma_share) ** self._alpha
+                        niche_count += sh
+
+                if niche_count > 0:
+                    individuals[idx].fitness /= niche_count

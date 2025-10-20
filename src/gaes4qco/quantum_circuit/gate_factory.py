@@ -66,16 +66,14 @@ class GateFactory:
         gate_class, qubits_min = self._choice_gate_class(lim_qubits)
         generated_angles = self._generate_random_params_for_gate(gate_class)
         steps_sizes = [StepSize() for _ in generated_angles] if use_evolutionary_strategy else None
-        chosen_qubits, extra_controls = self._choice_qubits(available_qubits, qubits_min)
+        chosen_qubits = self._choice_qubits(available_qubits, qubits_min)
 
         # Retorna nossa entidade 'Gate', e não 'GateComponent'
         return Gate(
             gate_class=gate_class,
             qubits=chosen_qubits,
             parameters=generated_angles,
-            steps_sizes=steps_sizes,
-            extra_controls=extra_controls,
-            is_inverse=False
+            steps_sizes=steps_sizes
         )
 
     def build_identity_gate(self, qubit: int) -> Gate:
@@ -89,9 +87,7 @@ class GateFactory:
             gate_class=IGate,
             qubits=[qubit],
             parameters=[],
-            steps_sizes=None,
-            extra_controls=0,
-            is_inverse=False
+            steps_sizes=None
         )
 
     def create_from_dict(self, data: dict) -> Gate:
@@ -111,9 +107,7 @@ class GateFactory:
             gate_class=gate_class,
             qubits=data.get("qubits"),
             parameters=data.get("parameters"),
-            steps_sizes=steps_sizes,
-            extra_controls=data.get("extra_controls"),
-            is_inverse=data.get("is_inverse")
+            steps_sizes=steps_sizes
         )
 
     def _choice_gate_class(self, lim_qubits: int) -> Tuple[Type[QiskitGate], int]:
@@ -130,12 +124,11 @@ class GateFactory:
             )
         return random.choice(candidate_pool)
 
-    def _choice_qubits(self, qubits: List[int], min_qubits: int) -> Tuple[List[int], int]:
-        extra_controls = 0
+    def _choice_qubits(self, qubits: List[int], min_qubits: int) -> List[int]:
 
-        num_total_qubits = min_qubits + extra_controls
+        num_total_qubits = min_qubits
         chosen_qubits = random.sample(qubits, num_total_qubits)
-        return chosen_qubits, extra_controls
+        return chosen_qubits
 
     @classmethod
     def _generate_random_params_for_gate(cls, gate_class: Type[QiskitGate]) -> List[float]:
