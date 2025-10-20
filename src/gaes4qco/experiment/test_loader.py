@@ -112,7 +112,7 @@ class TestConfigLoader:
         phases = [self._build_phase(p) for p in cfg["phases"]]
 
         target_sv, target_filepath = self._load_or_create_target(
-            num_qubits=cfg.get("num_qubits"),
+            num_qubits=cfg.get("num_qubits", ExperimentConfig.num_qubits),
             depth=cfg["target_depth"],
             seed_target=cfg["seed_target"],
             allowed_gates=cfg.get("allowed_gates"),
