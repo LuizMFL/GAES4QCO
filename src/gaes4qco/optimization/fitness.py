@@ -21,6 +21,8 @@ class FidelityFitnessEvaluator(IFitnessEvaluator):
         Converte o circuito de domínio para Qiskit usando o adapter
         e então calcula a fidelidade.
         """
+        if circuit.fidelity:
+            return circuit.fidelity, circuit.fidelity
         # ## A conversão é delegada ao adapter, respeitando a Inversão de Dependência
         qiskit_circuit = self._adapter.from_domain(circuit)
 
@@ -42,11 +44,13 @@ class WeightedFidelityFitnessEvaluator(IFitnessEvaluator):
         self._target_depth = target_depth  # Profundidade do circuito alvo para normalização
 
     def evaluate(self, circuit: Circuit) -> Tuple[float, float]:
-        # 1. Calcula a fidelidade pura
-        qiskit_circuit = self._adapter.from_domain(circuit)
-        solution_sv = Statevector.from_instruction(qiskit_circuit)
-        fidelity = state_fidelity(solution_sv, self._target_sv)
-
+        if circuit.fidelity:
+            fidelity = circuit.fidelity
+        else:
+            # 1. Calcula a fidelidade pura
+            qiskit_circuit = self._adapter.from_domain(circuit)
+            solution_sv = Statevector.from_instruction(qiskit_circuit)
+            fidelity = state_fidelity(solution_sv, self._target_sv)
         # 3. Calcula a penalidade de profundidade
         depth_ratio = circuit.depth / self._target_depth if self._target_depth > 0 else circuit.depth
 

@@ -14,7 +14,8 @@ class Circuit:
             count_qubits: int,
             columns: List[Column],
             fitness: float = 0.0,
-            fidelity: float = 0.0
+            fidelity: float = None,
+            structural_representation: Set[Tuple] = None
     ):
         self.count_qubits = count_qubits
         self.columns = columns
@@ -24,7 +25,7 @@ class Circuit:
         self.rank: int = -1  # Rank da Fronteira de Pareto
         self.crowding_distance: float = 0.0  # Distância de multidão para desempate
 
-        self._structural_representation: Set[Tuple] = set()
+        self._structural_representation: Set[Tuple] = set() if structural_representation is None else structural_representation
 
     @property
     def objectives(self) -> Tuple[float, ...]:
@@ -39,7 +40,7 @@ class Circuit:
     def depth(self) -> int:
         return len(self.columns)
 
-    def get_structural_representation(self) -> Tuple[Tuple]:
+    def get_structural_representation(self) -> set[Tuple]:
         """
         Cria uma representação única da estrutura do circuito, ignorando parâmetros.
         O resultado é uma tupla de colunas, onde cada coluna é uma tupla de gates.
@@ -49,20 +50,19 @@ class Circuit:
                 (('CXGate', (0, 1), 0, False),)
             )
         """
-        representation = []
-        for i_col, col in enumerate(self.columns):
-            col_repr = []
-            for gate in col.get_gates():
-                qubits_tuple = tuple(sorted(gate.qubits))
-                gene = (
-                    gate.gate_class.__name__,
-                    qubits_tuple,
-                    i_col
-                )
-                col_repr.append(gene)
-            representation.append(tuple(col_repr))
-
-        return tuple(representation)
+        if not self._structural_representation:
+            for i_col, col in enumerate(self.columns):
+                col_repr = []
+                for gate in col.get_gates():
+                    qubits_tuple = tuple(sorted(gate.qubits))
+                    gene = (
+                        gate.gate_class.__name__,
+                        qubits_tuple,
+                        i_col
+                    )
+                    col_repr.append(gene)
+                self._structural_representation.add(tuple(col_repr))
+        return self._structural_representation
 
     def to_dict(self) -> dict:
         """Converte o objeto Circuit e seus componentes para um dicionário serializável."""
@@ -84,5 +84,6 @@ class Circuit:
         """
         return Circuit(
             count_qubits=self.count_qubits,
-            columns=[col.copy() for col in self.columns]
+            columns=[col.copy() for col in self.columns],
+            structural_representation=self._structural_representation
         )

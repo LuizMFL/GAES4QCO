@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, Any
 
 from qiskit.circuit import QuantumCircuit as QiskitCircuit
 from .circuit import Circuit
@@ -25,3 +25,20 @@ class IQuantumExecutor(ABC):
         a contagem de resultados (ex: {'001': 512, '101': 488}).
         """
         pass
+
+
+class ICircuitFactory(ABC):
+    @abstractmethod
+    def create_random_circuit(
+        self,
+        num_qubits: int,
+        max_depth: int,
+        min_depth: int,
+        use_evolutionary_strategy: bool
+    ) -> Circuit:
+        pass
+
+    @abstractmethod
+    def create_from_dict(self, data: Dict[str, Any]) -> Circuit:
+        pass
+

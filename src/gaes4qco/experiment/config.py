@@ -32,12 +32,12 @@ class ExperimentConfig:
     seed: int
     max_depth: int
     min_depth: int
-    target_depth: int
     target_statevector_data: List[Any]
     filename_target_circuit: str
     phases: List[PhaseConfig]
     resume_from_checkpoint: bool
     allowed_gates: Optional[List[str]] = None
+    target_depth: int = 20
     num_qubits: int = 4
     elitism_size: int = 10
     population_size: int = 200

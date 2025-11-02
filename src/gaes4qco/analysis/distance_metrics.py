@@ -1,5 +1,5 @@
-from quantum_circuit.circuit import Circuit
 from .interfaces import IDistanceMetric
+from quantum_circuit.circuit import Circuit
 
 
 class StructuralJaccardDistance(IDistanceMetric):
@@ -9,8 +9,8 @@ class StructuralJaccardDistance(IDistanceMetric):
     """
     @staticmethod
     def calculate(ind1: Circuit, ind2: Circuit) -> float:
-        set1 = set(ind1.get_structural_representation())
-        set2 = set(ind2.get_structural_representation())
+        set1 = ind1.get_structural_representation()
+        set2 = ind2.get_structural_representation()
 
         intersection_size = len(set1.intersection(set2))
         union_size = len(set1.union(set2))

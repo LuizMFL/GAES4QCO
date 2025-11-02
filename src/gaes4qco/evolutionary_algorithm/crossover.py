@@ -1,5 +1,8 @@
 import random
+from itertools import chain
 from typing import Tuple, List
+
+import numpy as np
 
 from quantum_circuit.gate import Gate
 from quantum_circuit.gate_factory import GateFactory
@@ -16,14 +19,13 @@ class PopulationCrossover(IPopulationCrossover):
     def run(self, parent_population: Population) -> Population:
         # 1. Extrai a lista de indivíduos do objeto Population.
         parents_local = parent_population.get_individuals()
-        random.shuffle(parents_local)
         offspring = []
-
-        for i in range(0, len(parents_local), 2):
+        indices = random.sample(range(len(parents_local)), len(parents_local))
+        for i in range(0, len(indices), 2):
             if i + 1 >= len(parents_local):
-                offspring.append(parents_local[i])
+                offspring.append(parents_local[indices[i]])
                 continue
-            parent1, parent2 = parents_local[i], parents_local[i + 1]
+            parent1, parent2 = parents_local[indices[i]], parents_local[indices[i + 1]]
             if random.random() < self.crossover_rate:
                 child1, child2 = self.crossover_strategy.crossover(parent1, parent2)
                 offspring.extend([child1, child2])
@@ -36,16 +38,12 @@ class PopulationCrossover(IPopulationCrossover):
 class MultiPointCrossover(ICrossoverStrategy):
     def crossover(self, parent_1: Circuit, parent_2: Circuit) -> Tuple[Circuit, Circuit]:
         min_depth = min(parent_1.depth, parent_2.depth)
-        crossover_points = [random.choice([0, 1]) for _ in range(min_depth)]
         child1_cols, child2_cols = [], []
-
-        for i in range(min_depth):
-            if crossover_points[i] == 0:
-                child1_cols.append(parent_1.columns[i].copy())
-                child2_cols.append(parent_2.columns[i].copy())
-            else:
-                child1_cols.append(parent_2.columns[i].copy())
-                child2_cols.append(parent_1.columns[i].copy())
+        crossover_points = np.random.randint(0, 2, size=min_depth, dtype=np.int8)
+        for i, use_p1 in enumerate(crossover_points):
+            src1, src2 = (parent_1, parent_2) if use_p1 else (parent_2, parent_1)
+            child1_cols.append(src1.columns[i].copy())
+            child2_cols.append(src2.columns[i].copy())
 
         if parent_1.depth > min_depth:
             child1_cols.extend([col.copy() for col in parent_1.columns[min_depth:]])
@@ -118,12 +116,8 @@ class SinglePointCrossover(ICrossoverStrategy):
             return parent_1.copy(), parent_2.copy()
 
         crossover_point = random.randint(1, min_depth - 1)
-
-        # Cria os filhos trocando as colunas a partir do ponto de crossover
-        child1_cols = [col.copy() for col in parent_1.columns[:crossover_point]] + \
-                      [col.copy() for col in parent_2.columns[crossover_point:]]
-        child2_cols = [col.copy() for col in parent_2.columns[:crossover_point]] + \
-                      [col.copy() for col in parent_1.columns[crossover_point:]]
+        child1_cols = [col.copy() for col in chain(parent_1.columns[:crossover_point], parent_2.columns[crossover_point:])]
+        child2_cols = [col.copy() for col in chain(parent_2.columns[:crossover_point], parent_1.columns[crossover_point:])]
 
         num_qubits = max(parent_1.count_qubits, parent_2.count_qubits)
         child1 = Circuit(num_qubits, child1_cols)

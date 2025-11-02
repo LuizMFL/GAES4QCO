@@ -4,15 +4,14 @@ from typing import Type, List, Dict, Tuple, Optional
 
 from numpy import pi as PI
 from qiskit.circuit import Gate as QiskitGate
+
 from qiskit.circuit.library.standard_gates import (
-    XGate, YGate, ZGate, HGate, PhaseGate, SwapGate, UGate, RXGate,
-    RYGate, RZGate, SGate, SXGate, TGate, IGate, RGate, RXXGate,
-    RYYGate, RZXGate, RZZGate, DCXGate, ECRGate,
-    RCCXGate, RC3XGate, XXMinusYYGate, XXPlusYYGate,
-    CXGate
+    XGate, YGate, ZGate, HGate, SGate, TGate, SXGate,
+    RXGate, RYGate, RZGate, PhaseGate, UGate, CXGate, CZGate,
+    CYGate, DCXGate, ECRGate, RZXGate, RZZGate, RXXGate, RYYGate,
+    CHGate, RCCXGate, IGate, RGate, CU1Gate, CU3Gate
 )
 
-# Imports atualizados para a nova arquitetura
 from .gate import Gate
 from shared.value_objects import StepSize
 
@@ -33,11 +32,10 @@ class GateFactory:
         gate_class_map: Dict[int, List[Type[QiskitGate]]] = {
             1: [XGate, YGate, ZGate, HGate, SGate, TGate, IGate, SXGate,
                 UGate, PhaseGate, RGate, RXGate, RYGate, RZGate],
-            2: [SwapGate, RXXGate, RYYGate, RZZGate, RZXGate,
-                DCXGate, ECRGate, XXMinusYYGate, XXPlusYYGate,
-                CXGate],
+            2: [RXXGate, RYYGate, RZZGate, RZXGate,
+                DCXGate, ECRGate, CXGate, CZGate, CYGate,
+                CU1Gate, CU3Gate, CHGate],
             3: [RCCXGate],
-            4: [RC3XGate]
         }
 
         # Filtra dinamicamente de acordo com allowed_gates

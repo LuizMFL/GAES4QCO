@@ -66,7 +66,7 @@ class Population:
         seen_signatures = set()
         unique_individuals = []
         for individual in self._individuals:
-            signature = tuple(individual.get_structural_representation())
+            signature = individual.get_structural_representation()
             if signature not in seen_signatures:
                 seen_signatures.add(signature)
                 unique_individuals.append(individual)

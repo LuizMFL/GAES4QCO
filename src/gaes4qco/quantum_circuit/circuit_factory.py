@@ -3,9 +3,10 @@ from typing import List, Dict, Any
 from .circuit import Circuit
 from .column import Column
 from .gate_factory import GateFactory  # <-- Importa a nova factory
+from .interfaces import ICircuitFactory
 
 
-class CircuitFactory:
+class CircuitFactory(ICircuitFactory):
     """
     Responsável por criar instâncias da nossa entidade Circuit,
     delegando a criação de gates para a GateFactory.

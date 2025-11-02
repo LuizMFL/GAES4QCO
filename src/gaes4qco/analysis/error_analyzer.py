@@ -1,11 +1,13 @@
 import numpy as np
 
 from qiskit.quantum_info import Statevector, state_fidelity
+
+from analysis.interfaces import IErrorAnalyzer
 from quantum_circuit.circuit import Circuit
 from quantum_circuit.interfaces import IQuantumExecutor
 
 
-class ErrorAnalyzer:
+class ErrorAnalyzer(IErrorAnalyzer):
     """Calcula a taxa de erro de um circuito comparando sua execução
     com o resultado ideal, seja em statevector ou counts ruidosos."""
 
@@ -19,7 +21,6 @@ class ErrorAnalyzer:
         """
         # Estado com maior probabilidade no target
         ideal_probs = target_statevector.probabilities_dict()
-        #correct_state_str = max(ideal_probs, key=ideal_probs.get)
         # Executa o circuito
         result = self._executor.execute(circuit, shots, measure=True)
         if isinstance(result, dict):

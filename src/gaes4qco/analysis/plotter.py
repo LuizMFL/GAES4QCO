@@ -55,6 +55,7 @@ class EvolutionPlotter(IPlotter):
         ax2.plot(generations, diversity, color=color, linestyle='-.', label='Diversidade')
         ax2.tick_params(axis='y', labelcolor=color)
         ax2.set_ylim(0, 1)
+        ax2.set_xlim(0, data.generation_count)
 
         # --- Marcação visual das fases ---
         if config_info and "phases" in config_info:
@@ -149,7 +150,7 @@ class EvolutionPlotter(IPlotter):
         print("✅ Gráfico salvo com sucesso.")
 
 
-class AggregatePlotter:
+class EvolutionAggregatedPlotter:
     """Gera um gráfico com a média e desvio padrão de múltiplas execuções."""
 
     def plot(self, all_results: List[ResultData], output_path: str):
@@ -157,6 +158,7 @@ class AggregatePlotter:
 
         # Número mínimo de gerações entre execuções
         min_generations = min(res.generation_count for res in all_results)
+        generations = range(min_generations)
 
         # Matrizes 2D (cada linha: geração, cada coluna: execução)
         best_fitness_matrix = np.array(
@@ -169,13 +171,14 @@ class AggregatePlotter:
             [_clip(res.structural_diversity_per_generation[:min_generations]) for res in all_results]
         )
 
-        # Médias e desvios
+        # === Estatísticas ===
         mean_best_fitness = _clip(np.mean(best_fitness_matrix, axis=0))
         std_best_fitness = np.std(best_fitness_matrix, axis=0)
         mean_avg_fitness = _clip(np.mean(avg_fitness_matrix, axis=0))
         std_avg_fitness = np.std(avg_fitness_matrix, axis=0)
         mean_diversity = _clip(np.mean(diversity_matrix, axis=0))
         std_diversity = np.std(diversity_matrix, axis=0)
+        best_global_fitness = np.max(best_fitness_matrix, axis=0)
 
         # Preenchimentos limitados
         lower_best = _clip(mean_best_fitness - std_best_fitness)
@@ -185,21 +188,36 @@ class AggregatePlotter:
         lower_div = _clip(mean_diversity - std_diversity)
         upper_div = _clip(mean_diversity + std_diversity)
 
-        generations = range(min_generations)
+        # === Criação da figura ===
         fig, ax1 = plt.subplots(figsize=(14, 7))
 
         # --- Fitness ---
         color = 'tab:blue'
         ax1.set_xlabel('Geração')
-        ax1.set_ylabel('Fitness Médio (entre execuções)', color=color)
-        ax1.plot(generations, mean_best_fitness, color='blue', linestyle='-', label='Média Melhor Fitness')
-        ax1.fill_between(generations, lower_best, upper_best, alpha=0.2, color='blue')
-        ax1.plot(generations, mean_avg_fitness, color='cyan', linestyle='--', label='Média Fitness Médio')
-        ax1.fill_between(generations, lower_avg, upper_avg, alpha=0.2, color='cyan')
+        ax1.set_ylabel('Fitness', color=color)
+        ax1.grid(True, which='both', linestyle=':', linewidth=0.5)
+
+        # Linha de média do melhor fitness
+        ax1.plot(generations, mean_best_fitness, color=color, linestyle='-', label='Média do Melhor Fitness')
+        ax1.fill_between(generations, lower_best, upper_best, alpha=0.2, color=color)
+
+        # Linha de média do fitness médio
+        ax1.plot(generations, mean_avg_fitness, color='cyan', linestyle='--', label='Média do Fitness Médio')
+        ax1.fill_between(generations, lower_avg, upper_avg, alpha=0.15, color='cyan')
+
+        # === NOVA LINHA: melhor fitness global ===
+        ax1.plot(
+            generations,
+            best_global_fitness,
+            color='black',
+            linestyle='-',
+            linewidth=2.2,
+            label='Melhor Fitness Global (entre execuções)'
+        )
 
         ax1.tick_params(axis='y', labelcolor=color)
-        ax1.grid(True, which='both', linestyle=':', linewidth=0.5)
-        ax1.set_ylim(0, 1.05)
+        ax1.set_ylim(0, 1)
+        ax1.set_xlim(0, min_generations)
 
         # --- Diversidade ---
         ax2 = ax1.twinx()
@@ -208,15 +226,18 @@ class AggregatePlotter:
         ax2.plot(generations, mean_diversity, color=color, linestyle='-.', label='Média Diversidade')
         ax2.fill_between(generations, lower_div, upper_div, alpha=0.2, color=color)
         ax2.tick_params(axis='y', labelcolor=color)
-        ax2.set_ylim(0, 1.05)
+        ax2.set_ylim(0, 1)
+        ax2.set_xlim(0, min_generations)
 
         # Legendas combinadas
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax2.legend(lines1 + lines2, labels1 + labels2, loc='center right')
 
-        plt.title(f'Desempenho Médio de {len(all_results)} Execuções', pad=20)
+        plt.title(f'Desempenho Agregado de {len(all_results)} Execuções', pad=20)
         fig.tight_layout(rect=(0, 0, 1, 0.97))
+
+        # === Salvamento ===
         plt.savefig(output_path, bbox_inches='tight', dpi=200)
         plt.close()
         print("✅ Gráfico agregado salvo com sucesso.")
@@ -276,6 +297,7 @@ class FidelityDepthPlotter(IPlotter):
         ax2.tick_params(axis='y', labelcolor=color_depth)
         ax2.grid(True, which='both', linestyle=":", linewidth=0.5)
         ax2.set_ylim(config_info["min_depth"], config_info["max_depth"])
+        ax2.set_xlim(0, data.generation_count)
 
         # === Marcação das Phases ===
         if config_info and "phases" in config_info:
@@ -368,3 +390,82 @@ class FidelityDepthPlotter(IPlotter):
         plt.savefig(output_path, bbox_inches='tight', dpi=200)
         plt.close()
         print("✅ Gráfico de Fidelidade/Profundidade salvo com sucesso.")
+
+
+class FidelityDepthAggregatedPlotter:
+    """Plots aggregated fidelity and structural depth across multiple runs."""
+
+    def plot(self, all_results: List[ResultData], output_path: str, config_info: Dict = None):
+        print(f"Gerando gráfico agregado de fidelidade/profundidade em {output_path}...")
+
+        min_generations = min(res.generation_count for res in all_results)
+        generations = range(min_generations)
+
+        # --- Matrizes ---
+        best_fid_matrix = np.array(
+            [_clip(res.best_fidelity_per_generation[:min_generations]) for res in all_results]
+        )
+        avg_fid_matrix = np.array(
+            [_clip(res.average_fidelity_per_generation[:min_generations]) for res in all_results]
+        )
+        depth_matrix = np.array([
+            np.array(res.average_depth_per_generation[:min_generations]) if res.average_depth_per_generation else np.zeros(min_generations)
+            for res in all_results
+        ])
+
+        # --- Estatísticas ---
+        mean_best_fid = _clip(np.mean(best_fid_matrix, axis=0))
+        std_best_fid = np.std(best_fid_matrix, axis=0)
+        mean_avg_fid = _clip(np.mean(avg_fid_matrix, axis=0))
+        std_avg_fid = np.std(avg_fid_matrix, axis=0)
+        mean_depth = np.mean(depth_matrix, axis=0)
+        std_depth = np.std(depth_matrix, axis=0)
+        best_global_fid = np.max(best_fid_matrix, axis=0)
+
+        # --- Faixas ---
+        lower_best_fid = _clip(mean_best_fid - std_best_fid)
+        upper_best_fid = _clip(mean_best_fid + std_best_fid)
+        lower_avg_fid = _clip(mean_avg_fid - std_avg_fid)
+        upper_avg_fid = _clip(mean_avg_fid + std_avg_fid)
+        lower_depth = np.maximum(config_info.get("min_depth", 0), mean_depth - std_depth)
+        upper_depth = np.minimum(config_info.get("max_depth", np.max(mean_depth)), mean_depth + std_depth)
+
+        # --- Gráfico ---
+        fig, ax1 = plt.subplots(figsize=(14, 7))
+
+        # Fidelidade
+        color_fid = '#1f77b4'
+        ax1.set_xlabel('Geração')
+        ax1.set_ylabel('Fidelidade', color=color_fid)
+        ax1.grid(True, linestyle=':', linewidth=0.5)
+
+        ax1.plot(generations, mean_best_fid, color=color_fid, linestyle='-', label='Média do Melhor Fidelidade')
+        ax1.fill_between(generations, lower_best_fid, upper_best_fid, alpha=0.2, color=color_fid)
+
+        ax1.plot(generations, mean_avg_fid, color='cyan', linestyle='--', label='Média da Fidelidade Média')
+        ax1.fill_between(generations, lower_avg_fid, upper_avg_fid, alpha=0.15, color='cyan')
+
+        ax1.plot(generations, best_global_fid, color='black', linewidth=2.2, label='Melhor Fidelidade Global')
+        ax1.tick_params(axis='y', labelcolor=color_fid)
+        ax1.set_ylim(0, 1)
+        ax1.set_xlim(0, min_generations)
+
+        # Profundidade (eixo secundário)
+        color_depth = '#9467bd'
+        ax2 = ax1.twinx()
+        ax2.set_ylabel('Profundidade Estrutural', color=color_depth)
+        ax2.plot(generations, mean_depth, color=color_depth, linestyle='-.', label='Média Profundidade')
+        ax2.fill_between(generations, lower_depth, upper_depth, alpha=0.25, color=color_depth)
+        ax2.tick_params(axis='y', labelcolor=color_depth)
+        ax2.set_ylim(config_info.get("min_depth", 0), config_info.get("max_depth"))
+        ax2.set_xlim(0, min_generations)
+        # Legendas
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines1 + lines2, labels1 + labels2, loc='center right')
+
+        plt.title(f'Evolução Agregada da Fidelidade e Profundidade ({len(all_results)} execuções)', pad=20)
+        fig.tight_layout(rect=(0, 0, 1, 0.97))
+        plt.savefig(output_path, bbox_inches='tight', dpi=200)
+        plt.close()
+        print("✅ Gráfico agregado de fidelidade/profundidade salvo com sucesso.")

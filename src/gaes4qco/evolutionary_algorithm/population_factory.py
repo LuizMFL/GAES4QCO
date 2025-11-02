@@ -1,7 +1,7 @@
 from typing import List
 
+from quantum_circuit.interfaces import ICircuitFactory
 from .population import Population
-from quantum_circuit.circuit_factory import CircuitFactory
 
 
 class PopulationFactory:
@@ -9,7 +9,7 @@ class PopulationFactory:
     Responsável por criar uma instância de Population com indivíduos
     gerados aleatoriamente.
     """
-    def __init__(self, circuit_factory: CircuitFactory):
+    def __init__(self, circuit_factory: ICircuitFactory):
         self._circuit_factory = circuit_factory
 
     def create(

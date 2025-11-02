@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import List
 
+from analysis.interfaces import IJsonResultConcatenator
 from experiment.test_loader import TestConfigLoader
 from experiment.config import ExperimentConfig
 from analysis.result_file_locator import ResultFileLocator
@@ -11,7 +12,7 @@ from analysis.loader import JsonDataLoader
 from analysis.data_models import ResultData
 
 
-class JsonResultConcatenator:
+class JsonResultConcatenator(IJsonResultConcatenator):
     """
     Combina os resultados de múltiplas phases de um mesmo experimento em um único JSON.
     """

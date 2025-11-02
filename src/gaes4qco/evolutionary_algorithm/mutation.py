@@ -24,8 +24,11 @@ class RandomMutationSelector(IMutationPopulation):
             if random.random() < self.mutation_rate:
                 applicable_strategies = [s for s in self._strategies if s.can_apply(individual_copy)]
                 if applicable_strategies:
-                    strategy = random.choice(applicable_strategies)
+                    strategy: IMutationStrategy = random.choice(applicable_strategies)
                     mutated_circuit = strategy.mutate_individual(individual_copy)
+                    mutated_circuit._structural_representation = set()
+                    mutated_circuit.fidelity = None
+                    mutated_circuit.fitness = 0.0
                     mutated_individuals.append(mutated_circuit)
                 else:
                     mutated_individuals.append(individual_copy)
@@ -110,7 +113,6 @@ class BanditMutationSelector(IMutationPopulation):
         return Population(mutated_individuals)
 
 
-
 # --- Classes de Estratégia de Mutação Específicas ---
 
 class SwapColumnsMutation(IMutationStrategy):
@@ -121,6 +123,7 @@ class SwapColumnsMutation(IMutationStrategy):
         col1_idx, col2_idx = random.sample(range(circuit.depth), 2)
         circuit.columns[col1_idx], circuit.columns[col2_idx] = \
             circuit.columns[col2_idx], circuit.columns[col1_idx]
+        circuit._structural_representation = set()
         return circuit
 
 
@@ -189,7 +192,6 @@ class ChangeDepthMutation(IMutationStrategy):
                     except ValueError:
                         break  # Não há mais gates que possam ser adicionados
                 circuit.columns.append(new_column)
-
         return circuit
 
 
@@ -256,27 +258,23 @@ class SwapControlTargetMutation(IMutationStrategy):
 
     Detecta automaticamente gates controlados com base em suas propriedades do Qiskit.
     """
-    CONTROL_GATE_NAMES = {"CXGate", "CCXGate", "MCXGate", "RCCXGate", "RC3XGate", "MCX_GrayGate", "MCX_RecursiveGate"}
+    CONTROL_GATE_NAMES = {"CXGate", "CZGate", "CYGate", "DCXGate", "ECRGate", "CHGate", "RCCXGate", "CU1Gate", "CU3Gate"}
 
     @staticmethod
     def _get_num_controls(gate):
         # Permitir receber tanto a classe quanto a instância
-        gate_name = getattr(gate, "__name__", gate.__class__.__name__).lower()
-        # Se for um ControlledGate real (ex: CX, MCX, CRZ, CU3, etc.)
-        if isinstance(gate, ControlledGate):
-            return gate.num_ctrl_qubits
-        # Fallback heurístico para gates compostos
-        if gate_name in ("ccxgate", "rccxgate"):
+        gate_name = gate.__name__
+        if gate_name in ["CXGate", "CZGate", "CYGate", "DCXGate", "ECRGate", "CHGate", "RCCXGate", "CU1Gate", "CU3Gate"]:
+            return 1
+        elif gate_name == "RCCXGate":
             return 2
-        if gate_name in ("rc3xgate", "mcxgate", "mcx_graygate", "mcx_recursivegate"):
-            return 3
         return 0
 
     def can_apply(self, circuit: Circuit) -> bool:
         """Verifica se existe pelo menos um gate com qubits de controle."""
 
         return any(
-            self._get_num_controls(gate.gate_class) > 0
+            gate.gate_class.__name__ in self.CONTROL_GATE_NAMES
             for column in circuit.columns
             for gate in column.get_gates()
         )
@@ -312,5 +310,4 @@ class SwapControlTargetMutation(IMutationStrategy):
         # Atualiza o gate
         target_gate.qubits = new_qubits
         circuit.columns[i_col].gates[i_gate] = target_gate
-
         return circuit

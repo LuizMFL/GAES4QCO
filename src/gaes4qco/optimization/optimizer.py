@@ -95,6 +95,5 @@ class Optimizer:
         ## Substitui a antiga função 'applyFitnessIntoCircuit'.
         """
         for individual in population.get_individuals():
-            if individual.fitness == 0.0:  # Assume 0.0 como não avaliado
-                individual.fitness, individual.fidelity = self._fitness_evaluator.evaluate(individual)
+            individual.fitness, individual.fidelity = self._fitness_evaluator.evaluate(individual)
         self._fitness_shaper.shape(population)

@@ -11,8 +11,8 @@ def main():
     em um simulador com ruído.
     """
     # --- Configuração ---
-    CIRCUIT_TO_TEST_PATH = r"/home/LuizMFL/Projects/GAES4QCO/results/target_circuits/target_seed_101.json"
-    circuit_optimized_path = r"/home/LuizMFL/Projects/GAES4QCO/results/pha=0_FD_mu_to_ns_AD_RD_ST_NL/14a4cac1_circuits/rank_000_fit_0.8510_depth_6.json"
+    CIRCUIT_TO_TEST_PATH = r"/results_gates_antigas/target_circuits/target_seed_101.json"
+    circuit_optimized_path = r"/results_gates_antigas/pha=0_WG_si_to_ns_AD_RD_ST_FT/39372e26_circuits/rank_000_fit_0.9695_fid_0.9724_depth_10.json"
     SHOTS = 2**20
     container = AppContainer()
     container.config.from_dict({
