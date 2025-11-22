@@ -14,7 +14,7 @@ class ErrorAnalyzer(IErrorAnalyzer):
     def __init__(self, executor: IQuantumExecutor):
         self._executor = executor
 
-    def calculate_error_rate(self, circuit: Circuit, target_statevector: Statevector, shots: int) -> float:
+    def calculate_error_rate(self, circuit: Circuit, target_statevector: Statevector, shots: int, verbose: bool = True) -> float:
         """
         Executa o circuito e calcula a taxa de erro.
         Funciona tanto para backend determinístico (statevector) quanto ruidoso (counts).
@@ -22,7 +22,7 @@ class ErrorAnalyzer(IErrorAnalyzer):
         # Estado com maior probabilidade no target
         ideal_probs = target_statevector.probabilities_dict()
         # Executa o circuito
-        result = self._executor.execute(circuit, shots, measure=True)
+        result = self._executor.execute(circuit, shots, measure=True, verbose=verbose)
         if isinstance(result, dict):
             # Distribuição observada (normalizada)
             measured_probs = {k: v / shots for k, v in result.items()}
@@ -36,12 +36,12 @@ class ErrorAnalyzer(IErrorAnalyzer):
             total_variation = 0.5 * np.sum(np.abs(p - q))
             error_rate = total_variation
 
-            print(f"[Simulador] TV distance = {total_variation:.4f} → Erro global = {error_rate:.2%}")
+            if verbose: print(f"[Simulador] TV distance = {total_variation:.4f} → Erro global = {error_rate:.2%}")
             return float(error_rate)
         elif isinstance(result, Statevector):
             fidelity = state_fidelity(result, target_statevector)
             error_rate = 1.0 - fidelity
-            print(f"Fidelidade: {fidelity:.4f} → Erro global = {error_rate:.2%}")
+            if verbose: print(f"Fidelidade: {fidelity:.4f} → Erro global = {error_rate:.2%}")
             return float(error_rate)
         else:
             raise TypeError(f"Executor retornou tipo inesperado: {type(result)}")

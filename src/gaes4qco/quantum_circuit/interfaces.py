@@ -19,7 +19,7 @@ class IQuantumCircuitAdapter(ABC):
 class IQuantumExecutor(ABC):
     """Interface para classes que executam um circuito quântico e retornam os resultados."""
     @abstractmethod
-    def execute(self, circuit: Circuit, shots: int, measure: bool) -> Dict[str, int]:
+    def execute(self, circuit: Circuit, shots: int, measure: bool, verbose: bool = True) -> Dict[str, int]:
         """
         Executa um circuito por um número de 'shots' (medições) e retorna
         a contagem de resultados (ex: {'001': 512, '101': 488}).

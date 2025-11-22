@@ -469,3 +469,120 @@ class FidelityDepthAggregatedPlotter:
         plt.savefig(output_path, bbox_inches='tight', dpi=200)
         plt.close()
         print("✅ Gráfico agregado de fidelidade/profundidade salvo com sucesso.")
+
+
+class ErrorRatePlotter:
+    """
+    Plota a taxa de erro média final de cada experimento.
+    Pode exibir todos os experimentos ou apenas o top-k.
+    """
+
+    def plot(self, experiment_metrics: List[Dict], output_path: str, top_only: bool = False):
+        if not experiment_metrics:
+            print("⚠️ Nenhuma métrica de erro fornecida para o plot.")
+            return
+
+        # Ordena por erro crescente
+        experiment_metrics = sorted(experiment_metrics, key=lambda x: x["mean_error"])
+        names = [exp["name"] for exp in experiment_metrics]
+        errors = [exp["mean_error"] * 100 for exp in experiment_metrics]
+        num_experiments = len(errors)
+
+        # Determina os Top-5%
+        top_k = max(1, int(num_experiments * 0.05))
+        top_indices = list(range(top_k))
+
+        # Se for gráfico apenas dos Top-5%, recorta
+        if top_only:
+            names = names[:top_k]
+            errors = errors[:top_k]
+            num_experiments = top_k
+            top_indices = list(range(num_experiments))
+            print(f"📊 Plotando apenas os Top 5% ({num_experiments} experimentos).")
+
+        # === Gráfico ===
+        fig, ax = plt.subplots(figsize=(12, max(5, num_experiments * 0.3)))
+
+        y_pos = np.arange(num_experiments)
+        colors = ["#2ca02c" if i in top_indices else "#888888" for i in range(num_experiments)]
+
+        bars = ax.barh(y_pos, errors, color=colors, edgecolor="black", alpha=0.85)
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(names, fontsize=8)
+        ax.invert_yaxis()
+        ax.set_xlabel("Taxa de Erro Média (%)", fontsize=11)
+        ax.set_title(
+            "Top 5% Experimentos (menor erro)" if top_only
+            else "Comparativo de Taxa de Erro Média por Experimento",
+            fontsize=13,
+            pad=15
+        )
+        ax.grid(axis="x", linestyle=":", linewidth=0.5)
+
+        for bar, err in zip(bars, errors):
+            ax.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height() / 2,
+                    f"{err:.2f}%", va="center", ha="left", fontsize=8)
+
+        plt.tight_layout()
+        plt.savefig(output_path, bbox_inches="tight", dpi=200)
+        plt.close()
+        print(f"✅ Gráfico salvo em {output_path}")
+
+
+class GroupErrorRatePlotter:
+    """
+    Plota taxa de erro média por grupo (configuração-base).
+    Usado na Fase 2 onde experimentos são agrupados.
+    """
+
+    def plot(self, group_metrics: List[Dict], output_path: str, top_only: bool = False):
+        if not group_metrics:
+            print("⚠️ Nenhuma métrica de erro agrupada fornecida para o plot.")
+            return
+
+        # Ordena por erro crescente (mean_elite_seed)
+        group_metrics = sorted(group_metrics, key=lambda x: x["mean_elite_seed"])
+
+        names = [g["group_name"] for g in group_metrics]
+        errors = [g["mean_elite_seed"] * 100 for g in group_metrics]
+        num_groups = len(errors)
+
+        # Determina top 5%
+        top_k = max(1, int(num_groups * 0.05))
+        top_indices = list(range(top_k))
+
+        if top_only:
+            names = names[:top_k]
+            errors = errors[:top_k]
+            num_groups = top_k
+            top_indices = list(range(num_groups))
+            print(f"📊 Plotando apenas os Top 5% ({num_groups} grupos).")
+
+        fig, ax = plt.subplots(figsize=(12, max(5, num_groups * 0.3)))
+
+        y_pos = np.arange(num_groups)
+        colors = ["#2ca02c" if i in top_indices else "#888888" for i in range(num_groups)]
+
+        bars = ax.barh(y_pos, errors, color=colors, edgecolor="black", alpha=0.85)
+
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(names, fontsize=8)
+        ax.invert_yaxis()
+        ax.set_xlabel("Taxa de Erro Média da Elite (%)", fontsize=11)
+        ax.set_title(
+            "Top 5% Configurações (Fase 2)" if top_only
+            else "Comparativo de Configurações (Fase 2)",
+            fontsize=14,
+            pad=15
+        )
+        ax.grid(axis="x", linestyle=":", linewidth=0.5)
+
+        # valores numéricos ao lado das barras
+        for bar, err in zip(bars, errors):
+            ax.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height() / 2,
+                    f"{err:.2f}%", va="center", ha="left", fontsize=8)
+
+        plt.tight_layout()
+        plt.savefig(output_path, bbox_inches="tight", dpi=200)
+        plt.close()
+        print(f"✅ Gráfico salvo em {output_path}")

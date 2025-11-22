@@ -39,7 +39,7 @@ class IDistanceMetric(ABC):
 
 class IErrorAnalyzer(ABC):
     @abstractmethod
-    def calculate_error_rate(self, circuit: Circuit, target_statevector: Statevector, shots: int) -> float:
+    def calculate_error_rate(self, circuit: Circuit, target_statevector: Statevector, shots: int, verbose: bool = True) -> float:
         pass
 
 
