@@ -225,7 +225,7 @@ class GateParameterMutation(IMutationStrategy):
         # Escolhe um parâmetro e o modifica
         i_col, i_gate, i_param = random.choice(mutable_params)
         target_gate = circuit.columns[i_col].gates[i_gate]
-        if any(gate.steps_sizes for col in circuit.columns for gate in col.get_gates()):
+        if target_gate.steps_sizes and i_param < len(target_gate.steps_sizes):
             step_size = target_gate.steps_sizes[i_param]
 
             # Modifica o ângulo

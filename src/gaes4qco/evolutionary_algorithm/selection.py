@@ -10,7 +10,6 @@ from .population import Population
 
 class SelectionType(Enum):
     TOURNAMENT = "tournament"
-    RANDOM = "random"
     ROULETTE = "roulette"
     NSGA2 = "nsga2"
 
