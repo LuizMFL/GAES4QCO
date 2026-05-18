@@ -11,7 +11,6 @@ from experiment.config import ExperimentConfig, PhaseConfig
 from evolutionary_algorithm.selection import SelectionType
 from quantum_circuit.circuit import Circuit
 from quantum_circuit.interfaces import IQuantumCircuitAdapter
-from shared.value_objects import CrossoverType
 
 PROJECT_PATH = Path(__file__).resolve().parents[3]
 TARGET_DIR = PROJECT_PATH / "results" / "target_circuits"
@@ -105,6 +104,7 @@ class TestConfigLoader:
             crossover_strategy=phase_dict["crossover_strategy"].lower(),
             generations=int(phase_dict["generations"]),
             fidelity_threshold_stop=phase_dict.get("fidelity_threshold_stop"),
+            result_filepath=phase_dict.get("result_filepath")
         )
 
     def _build_experiment(self, cfg: dict) -> ExperimentConfig:
@@ -145,16 +145,52 @@ class TestConfigLoader:
 
         return ExperimentConfig(**required_kwargs)
 
-    def load_all(self) -> Tuple[List[ExperimentConfig], List[str]]:
-        """Loads all JSON configs from the tests directory."""
+    @staticmethod
+    def _update_source_json(file_path: Path, raw_data: dict, exp_config: ExperimentConfig):
+        """
+        Atualiza o dicionário lido com os caminhos relativos do alvo e dos resultados,
+        e sobrescreve o arquivo JSON original.
+        """
+
+        # Função auxiliar para tentar criar caminhos relativos ao projeto
+        def to_relative(path_str: str) -> str:
+            try:
+                return str(Path(path_str).relative_to(PROJECT_PATH))
+            except ValueError:
+                return path_str  # Fallback para o absoluto caso falhe
+
+        target_path = f"{exp_config.filename_target_circuit}.json"
+        raw_data["filename_target_circuit"] = to_relative(target_path)
+
+        config_paths = list(exp_config.config_file_path)
+
+        for i, config_path in enumerate(config_paths):
+            result_path = config_path.replace("_config.json", "_results.json")
+            rel_result_path = to_relative(result_path)
+
+            raw_data["phases"][i]["result_filepath"] = rel_result_path
+            exp_config.phases[i].result_filepath = rel_result_path
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(raw_data, f, indent=4)
+
+    def load_all(self, update_json: bool = True) -> Tuple[List[ExperimentConfig], List[str]]:
+        """Loads all JSON configs from the tests directory and optionally updates their paths."""
         configs = []
         filenames = []
         for file_path in sorted(self.tests_dir.glob("*.json")):
             try:
-                cfg = self._load_json(file_path)
-                configs.append(self._build_experiment(cfg))
+                cfg_dict = self._load_json(file_path)
+                exp_config = self._build_experiment(cfg_dict)
+
+                # NOVO: Atualiza o arquivo de origem com os caminhos calculados
+                if update_json:
+                    self._update_source_json(file_path, cfg_dict, exp_config)
+
+                configs.append(exp_config)
                 filenames.append(file_path.name)
-                print(f"✅ Loaded test config: {file_path.name}")
+                print(f"✅ Loaded (and updated paths for): {file_path.name}")
             except Exception as e:
                 print(f"⚠️ Failed to load {file_path.name}: {e}")
+
         return configs, filenames

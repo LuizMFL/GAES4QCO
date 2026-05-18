@@ -24,6 +24,7 @@ class PhaseConfig:
     crossover_strategy: CrossoverType
     generations: int
     fidelity_threshold_stop: Optional[float]
+    result_filepath: Optional[str] = None
 
 
 @dataclass
@@ -76,6 +77,11 @@ class ExperimentConfig:
         data = asdict(self).copy()
         data.pop("target_statevector_data", None)
         data.pop("resume_from_checkpoint", None)
+
+        if "phases" in data:
+            for phase in data["phases"]:
+                phase.pop("result_filepath", None)
+
         def custom_serializer(o):
             if is_dataclass(o):
                 return asdict(o)  # converte dataclass para dict
