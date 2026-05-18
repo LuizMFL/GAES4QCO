@@ -1,5 +1,7 @@
 from typing import List, Optional
 
+import time
+
 from evolutionary_algorithm.population_factory import PopulationFactory
 from evolutionary_algorithm.interfaces import ISelectionStrategy, IMutationPopulation, IPopulationCrossover
 from evolutionary_algorithm.population import Population
@@ -38,6 +40,7 @@ class Optimizer:
         self._injection_rate = injection_rate
         self._fitness_shaper = fitness_shaper
         self._observer = observer
+        self._total_evaluations = 0
 
     def run(
             self,
@@ -48,13 +51,21 @@ class Optimizer:
         """
         Executa o fluxo do algoritmo genético por um número de gerações.
         """
+        phase_start_time = time.time()
+        self._total_evaluations = 0
         current_population = initial_population
+        stopping_reason = "max_generations_reached"
 
         print("Evaluating initial population...")
         self._evaluate_population(current_population)
+
+        actual_generations = 0
+
         for gen in range(max_generations):
+            actual_generations = gen
+
             if self._observer:
-                self._observer.update(gen, current_population)
+                self._observer.update(gen, current_population, self._mutation.mutation_rate, self._crossover.crossover_rate)
             current_diversity = current_population.calculate_structural_diversity()
             current_rates = self._rate_adapter.adapt(current_diversity)
             self._crossover.crossover_rate = current_rates.crossover_rate
@@ -83,8 +94,20 @@ class Optimizer:
                     print(f"  -> Limiar de Fidelidade {fidelity_threshold} atingido na geração {gen}. Finalizando fase.")
                     break
 
+        phase_duration = time.time() - phase_start_time
+
         if self._observer:
-            self._observer.update(max_generations, current_population)
+            final_gen_index = actual_generations + 1
+            self._observer.update(final_gen_index, current_population, self._mutation.mutation_rate, self._crossover.crossover_rate)
+            best_circuit = current_population.get_fittest()
+            self._observer.set_summary(
+                duration_seconds=phase_duration,
+                final_generation=final_gen_index,
+                total_evaluations=self._total_evaluations,
+                stopping_reason=stopping_reason,
+                best_circuit=best_circuit
+            )
+            self._observer.set_duration(phase_duration, final_gen_index)
             self._observer.save()
 
         return current_population
@@ -96,4 +119,5 @@ class Optimizer:
         """
         for individual in population.get_individuals():
             individual.fitness, individual.fidelity = self._fitness_evaluator.evaluate(individual)
+            self._total_evaluations += 1
         self._fitness_shaper.shape(population)

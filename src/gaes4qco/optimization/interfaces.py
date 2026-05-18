@@ -26,11 +26,20 @@ class IProgressObserver(ABC):
     """Interface para classes que observam e registram o progresso do algoritmo."""
 
     @abstractmethod
-    def update(self, generation: int, population: Population):
+    def update(self, generation: int, population: Population, mutation_rate: float = 0.0, crossover_rate: float = 0.0):
         """Método chamado a cada geração para registrar o estado da população."""
         pass
 
     @abstractmethod
     def save(self):
         """Salva os dados coletados ao final da execução."""
+        pass
+
+    @abstractmethod
+    def set_duration(self, duration_seconds: float, final_generation: int):
+        """Define o tempo total de execução da fase."""
+        pass
+
+    @abstractmethod
+    def set_summary(self, duration_seconds: float, final_generation: int, total_evaluations: int, stopping_reason: str, best_circuit: Circuit):
         pass

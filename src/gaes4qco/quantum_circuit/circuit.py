@@ -87,3 +87,16 @@ class Circuit:
             columns=[col.copy() for col in self.columns],
             structural_representation=self._structural_representation
         )
+
+    def get_cx_count(self) -> int:
+        """
+        Conta o número de portas CX (CNOT) presentes no circuito.
+        Métrica vital para avaliar o custo de emaranhamento em hardwares NISQ.
+        """
+        count = 0
+        for col in self.columns:
+            for gate in col.get_gates():
+                if gate.gate_class.__name__ == 'CXGate':
+                    count += 1
+        return count
+    
