@@ -50,8 +50,13 @@ class ExperimentRunner:
     """Executa uma única instância completa de um experimento do GA."""
 
     def __init__(self, config: dict, container):
+        # Converte dicionários de fase em objetos PhaseConfig ANTES de criar ExperimentConfig
+        if "phases" in config and isinstance(config["phases"], list):
+            for i, phase in enumerate(config["phases"]):
+                if isinstance(phase, dict):
+                    config["phases"][i] = PhaseConfig(**phase)
+                    
         self.config = ExperimentConfig(**config)
-        self.config.phases = [PhaseConfig(**phase) for phase in config["phases"]]
         self.container = container()
 
     def _configure_container_for_phase(self, phase_config: PhaseConfig, observer_filename: str):
@@ -67,8 +72,8 @@ class ExperimentRunner:
                 "fitness_shaper": "sharing" if phase_config.use_fitness_sharing else "default",
                 "rate_adapter": "adaptive" if phase_config.use_adaptive_rates else "default",
                 "mutation": "bandit" if phase_config.use_bandit_mutation else "default",
-                "parent_selection": phase_config.parent_selection.value,
-                "survivor_selection": phase_config.survivor_selection.value,
+                "parent_selection": phase_config.parent_selection.value if hasattr(phase_config.parent_selection, 'value') else phase_config.parent_selection,
+                "survivor_selection": phase_config.survivor_selection.value if hasattr(phase_config.survivor_selection, 'value') else phase_config.survivor_selection,
                 "crossover": phase_config.crossover_strategy
             },
             "evolution": {
@@ -110,6 +115,7 @@ class ExperimentRunner:
         np.random.seed(self.config.seed)
 
         population: Population = Population()
+        result_files = []
         for i, (phase, config_file_path_str) in enumerate(zip(self.config.phases, self.config.config_file_path)):
             print(f"\n--- FASE {i} ---")
             config_file_path = Path(config_file_path_str)
@@ -118,6 +124,7 @@ class ExperimentRunner:
             with open(config_file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.config.to_dict(), f, indent=4)
             results_file_path = str(config_file_path).replace("_config.json", "_results.json")
+            result_files.append(results_file_path)
             self._configure_container_for_phase(phase, results_file_path)
 
             if self.config.resume_from_checkpoint:
@@ -153,5 +160,6 @@ class ExperimentRunner:
         return {
             "seed": self.config.seed,
             "best_fitness": best_circuit.fitness,
-            "duration_seconds": duration
+            "duration_seconds": duration,
+            "result_files": result_files
         }

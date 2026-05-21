@@ -7,9 +7,10 @@ from typing import List
 from analysis.interfaces import IJsonResultConcatenator
 from experiment.test_loader import TestConfigLoader
 from experiment.config import ExperimentConfig
-from analysis.result_file_locator import ResultFileLocator
 from analysis.loader import JsonDataLoader
 from analysis.data_models import ResultData
+
+PROJECT_PATH = Path(__file__).resolve().parents[3]
 
 
 class JsonResultConcatenator(IJsonResultConcatenator):
@@ -22,7 +23,6 @@ class JsonResultConcatenator(IJsonResultConcatenator):
         self.results_dir = results_dir
 
         self.loader = TestConfigLoader(self.tests_dir)
-        self.locator = ResultFileLocator(self.results_dir)
         self.data_loader = JsonDataLoader()
 
         self.output_dir = self.results_dir / "concatenated"
@@ -53,9 +53,17 @@ class JsonResultConcatenator(IJsonResultConcatenator):
         """
         Gera um único arquivo concatenado para um test.json específico.
         """
-        result_files = self.locator.locate_for_experiment(config)
+        result_files = []
+        for p in config.phases:
+            if p.result_filepath:
+                abs_path = PROJECT_PATH / p.result_filepath
+                if abs_path.exists():
+                    result_files.append(abs_path)
+                else:
+                    print(f"⚠️ Aviso: Arquivo de resultado não encontrado: {abs_path}")
+        
         if not result_files:
-            print(f"⚠️ Nenhum resultado encontrado para {test_filename}")
+            print(f"⚠️ Nenhum resultado válido encontrado para {test_filename}")
             return None
 
         print(f"🔗 Concatenando {len(result_files)} fases para {test_filename}...")
@@ -84,7 +92,7 @@ class JsonResultConcatenator(IJsonResultConcatenator):
         Processa todos os arquivos de teste encontrados no diretório `tests/`
         e retorna a lista de caminhos dos arquivos concatenados gerados.
         """
-        experiment_configs, filenames = self.loader.load_all()
+        experiment_configs, filenames = self.loader.load_all(update_json=False)
         concatenated_paths = []
 
         for cfg, fname in zip(experiment_configs, filenames):

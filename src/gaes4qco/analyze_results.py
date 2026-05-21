@@ -13,7 +13,6 @@ from analysis.plotter import (
 )
 from analysis.utils import dataclass_to_primitive
 from containers import AppContainer
-from experiment.runner import circuits_folder_path
 from experiment.test_loader import TestConfigLoader
 from experiment.config import ExperimentConfig
 
@@ -38,7 +37,7 @@ def main():
 
     # === Carrega todos os testes ===
     loader = TestConfigLoader(tests_dir)
-    experiment_configs, filenames = loader.load_all()
+    experiment_configs, filenames = loader.load_all(update_json=False)
     if not experiment_configs:
         print("⚠️ Nenhum teste válido encontrado em 'tests/'.")
         return
@@ -82,13 +81,13 @@ def main():
             result_data = json_loader.load(str(result_file))
 
             # === Determina a última fase do experimento ===
-            if not hasattr(config, "config_file_path") or not config.config_file_path:
-                print(f"⚠️ Configuração {test_filename} não contém caminhos de fases (config_file_path).")
+            if not config.phases or not config.phases[-1].result_filepath:
+                print(f"⚠️ Configuração {test_filename} não contém caminhos de resultados na última fase.")
                 continue
 
-            # Usa o último arquivo de configuração da lista (última fase)
-            last_phase_config_path = Path(list(config.config_file_path)[-1])
-            final_circuits_folder = circuits_folder_path(last_phase_config_path)
+            # Usa o caminho da última fase para encontrar a pasta de circuitos
+            last_phase_result_path = PROJECT_PATH / config.phases[-1].result_filepath
+            final_circuits_folder = last_phase_result_path.parent / last_phase_result_path.name.replace("_results.json", "_circuits")
 
             if not final_circuits_folder.exists():
                 print(f"⚠️ Pasta de circuitos finais não encontrada: {final_circuits_folder}")
@@ -180,7 +179,6 @@ def main():
         fid_output = plots_dir / f"aggregated_fidelity_depth_{combo}.png"
         aggregated_evo.plot(data_list, str(evo_output))
         aggregated_fid.plot(data_list, str(fid_output), config_info={"max_depth": max_depth})
-
 
     print("\n✅ Análise concluída com sucesso!")
 
