@@ -42,20 +42,73 @@ class ExperimentConfig:
     num_qubits: int = 4
     elitism_size: int = 10
     population_size: int = 200
-    tournament_size: int = 5
-    crossover_rate: float = 0.8  # Para FixedCrossover
-    mutation_rate: float = 0.15  # Para FixedMutation
-    min_mutation_rate: float = 0.2
-    max_mutation_rate: float = 0.5
-    min_crossover_rate: float = 0.6
-    max_crossover_rate: float = 0.95
     diversity_threshold: float = 0.1  # Limiar de 10%
     injection_rate: float = 0.15  # Injeta 15% quando ativado
-    sharing_radius: float = 0.3
-    alpha: float = 1.0
-    c_factor: float = 1.2   # StepSize
-    # O nome do arquivo de resultados é derivado da semente
-    # results_filename: str = field(init=False)
+    
+    # Hiperparâmetros Condicionais
+    tournament_size: Optional[int] = None
+    crossover_rate: Optional[float] = None
+    mutation_rate: Optional[float] = None
+    min_mutation_rate: Optional[float] = None
+    max_mutation_rate: Optional[float] = None
+    min_crossover_rate: Optional[float] = None
+    max_crossover_rate: Optional[float] = None
+    sharing_radius: Optional[float] = None
+    alpha: Optional[float] = None
+    c_factor: Optional[float] = None
+
+    def __post_init__(self):
+        # --- Validação e Limpeza de Hiperparâmetros Condicionais ---
+        uses_fixed_rates = any(not p.use_adaptive_rates for p in self.phases)
+        uses_adaptive_rates = any(p.use_adaptive_rates for p in self.phases)
+        uses_tournament = any(
+            p.parent_selection == SelectionType.TOURNAMENT or 
+            p.survivor_selection == SelectionType.TOURNAMENT 
+            for p in self.phases
+        )
+        uses_fitness_sharing = any(p.use_fitness_sharing for p in self.phases)
+        uses_stepsize = any(p.use_stepsize for p in self.phases)
+
+        # 1. Fixed Rates
+        if uses_fixed_rates:
+            if self.crossover_rate is None or self.mutation_rate is None:
+                raise ValueError("crossover_rate e mutation_rate são exigidos quando use_adaptive_rates é False em qualquer fase.")
+        else:
+            self.crossover_rate = None
+            self.mutation_rate = None
+
+        # 2. Adaptive Rates
+        if uses_adaptive_rates:
+            if None in (self.min_mutation_rate, self.max_mutation_rate, self.min_crossover_rate, self.max_crossover_rate):
+                raise ValueError("min_mutation_rate, max_mutation_rate, min_crossover_rate e max_crossover_rate são exigidos quando use_adaptive_rates é True em qualquer fase.")
+        else:
+            self.min_mutation_rate = None
+            self.max_mutation_rate = None
+            self.min_crossover_rate = None
+            self.max_crossover_rate = None
+
+        # 3. Tournament Selection
+        if uses_tournament:
+            if self.tournament_size is None:
+                raise ValueError("tournament_size é exigido quando parent_selection ou survivor_selection é TOURNAMENT em qualquer fase.")
+        else:
+            self.tournament_size = None
+
+        # 4. Fitness Sharing
+        if uses_fitness_sharing:
+            if self.sharing_radius is None or self.alpha is None:
+                raise ValueError("sharing_radius e alpha são exigidos quando use_fitness_sharing é True em qualquer fase.")
+        else:
+            self.sharing_radius = None
+            self.alpha = None
+
+        # 5. Step Size
+        if uses_stepsize:
+            if self.c_factor is None:
+                raise ValueError("c_factor é exigido quando use_stepsize é True em qualquer fase.")
+        else:
+            self.c_factor = None
+
 
     def get_config_foldername(self) -> Generator[str, Any, None]:
         """Gera um nome de pasta descritivo a partir das flags de configuração."""
@@ -110,4 +163,13 @@ class ExperimentConfig:
         del data["resume_from_checkpoint"]
         del data["phases"]
         data.pop("config_file_path", None)
+        
+        keys_to_remove = [k for k, v in data.items() if v is None and k in [
+            "tournament_size", "crossover_rate", "mutation_rate", 
+            "min_mutation_rate", "max_mutation_rate", "min_crossover_rate", 
+            "max_crossover_rate", "sharing_radius", "alpha", "c_factor"
+        ]]
+        for k in keys_to_remove:
+            data.pop(k, None)
+            
         return data
