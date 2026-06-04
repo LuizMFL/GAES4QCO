@@ -11,32 +11,29 @@ from .interfaces import IFitnessEvaluator, IProgressObserver, IFitnessShaper
 
 class Optimizer:
     """
-    O motor do Algoritmo Genético, implementando um modelo geracional com elitismo.
+    O motor do Algoritmo Genético, implementando um modelo (μ + λ) com elitismo.
     """
 
     def __init__(
             self,
             fitness_evaluator: IFitnessEvaluator,
             parent_selection: ISelectionStrategy,
+            survivor_selection: ISelectionStrategy,
             crossover: IPopulationCrossover,
             mutation: IMutationPopulation,
-            population_factory: PopulationFactory,
             rate_adapter: IRateAdapter,
             fitness_shaper: IFitnessShaper,
             observer: IProgressObserver,
-            elitism_size: int,
-            population_size: int,
             **kwargs 
     ):
         self._fitness_evaluator = fitness_evaluator
         self._parent_selection = parent_selection
+        self._survivor_selection = survivor_selection
         self._crossover = crossover
         self._mutation = mutation
         self._rate_adapter = rate_adapter
         self._fitness_shaper = fitness_shaper
         self._observer = observer
-        self._elitism_size = elitism_size
-        self._population_size = population_size
         self._total_evaluations = 0
         self._fitness_cache: Dict[Tuple, Tuple[float, float]] = {}
 
@@ -46,12 +43,10 @@ class Optimizer:
             max_generations: int,
             fidelity_threshold: Optional[float]
     ) -> Population:
-        """
-        Executa o fluxo do algoritmo genético usando um modelo geracional com elitismo.
-        """
         phase_start_time = time.time()
         self._total_evaluations = 0
         self._fitness_cache.clear()
+        
         current_population = initial_population
         stopping_reason = "max_generations_reached"
 
@@ -59,50 +54,35 @@ class Optimizer:
         self._evaluate_population(current_population)
 
         for gen in range(max_generations):
+            # Passa as taxas para o observer
+            mutation_rate = getattr(self._mutation, 'mutation_rate', 0)
+            crossover_rate = getattr(self._crossover, 'crossover_rate', 0)
             if self._observer:
-                self._observer.update(gen, current_population, getattr(self._mutation, 'mutation_rate', 0), getattr(self._crossover, 'crossover_rate', 0))
+                self._observer.update(gen, current_population, mutation_rate, crossover_rate)
 
-            # 1. Elitismo: Os melhores indivíduos são copiados diretamente para a próxima geração.
-            current_population.get_individuals().sort(key=lambda ind: ind.fitness, reverse=True)
-            elites = current_population.get_individuals()[:self._elitism_size]
-
-            # 2. Geração de Filhos para preencher o resto da população
-            num_offspring_to_create = self._population_size - len(elites)
-            
-            # Adapta taxas
+            # 1. Adaptação de Taxas
             current_diversity = current_population.calculate_structural_diversity()
             current_rates = self._rate_adapter.adapt(current_diversity)
             self._crossover.crossover_rate = current_rates.crossover_rate
             self._mutation.mutation_rate = current_rates.mutation_rate
             
-            # Loop de reprodução
-            offspring = []
-            while len(offspring) < num_offspring_to_create:
-                # Seleciona pais
-                parents = self._parent_selection.select(current_population, num_to_select=2).get_individuals()
-                
-                # Aplica Crossover
-                children = self._crossover.run(Population(parents)).get_individuals()
-                
-                # Aplica Mutação
-                mutated_children = self._mutation.mutate(Population(children)).get_individuals()
-                
-                offspring.extend(mutated_children)
-
-            # Pega o número exato de filhos necessários
-            final_offspring = offspring[:num_offspring_to_create]
+            # 2. Geração de Filhos
+            parent_population = self._parent_selection.select(current_population)
+            offspring_population = self._crossover.run(parent_population)
+            mutated_offspring = self._mutation.mutate(offspring_population)
             
             # 3. Avalia apenas os novos filhos
-            self._evaluate_population(Population(final_offspring))
+            self._evaluate_population(mutated_offspring)
             
-            # 4. Nova Geração: A nova população é a elite + os novos filhos
-            current_population = Population(elites + final_offspring)
+            # 4. Seleção de Sobreviventes: (μ + λ)
+            combined_population = Population(current_population.get_individuals() + mutated_offspring.get_individuals())
+            current_population = self._survivor_selection.select(combined_population)
 
             # 5. Condição de Parada
             if fidelity_threshold:
                 best_ind = current_population.get_fittest()
                 if best_ind and best_ind.fidelity is not None and best_ind.fidelity >= fidelity_threshold:
-                    logging.info(f"  -> Limiar de Fidelidade {fidelity_threshold} atingido na geração {gen}. Finalizando fase.")
+                    logging.info(f"-> Fidelity threshold {fidelity_threshold} reached at generation {gen}.")
                     stopping_reason = "fidelity_threshold_reached"
                     break
         

@@ -90,7 +90,13 @@ class EvolutionaryAlgorithmContainer(containers.DeclarativeContainer):
     _mutation_pool = providers.List(
         providers.Factory(mutation.SwapColumnsMutation),
         providers.Factory(mutation.SingleGateFlipMutation, gate_factory=factories.gate_factory, use_evolutionary_strategy=config.evolution.stepsize),
-        providers.Factory(mutation.ChangeDepthMutation, max_depth=config.evolution.max_depth, gate_factory=factories.gate_factory, use_evolutionary_strategy=config.evolution.stepsize),
+        providers.Factory(
+            mutation.ChangeDepthMutation, 
+            min_depth=config.evolution.min_depth,
+            max_depth=config.evolution.max_depth, 
+            gate_factory=factories.gate_factory, 
+            use_evolutionary_strategy=config.evolution.stepsize
+        ),
         providers.Factory(mutation.GateParameterMutation, fitness_evaluator=optimization.evaluator, c_factor=config.evolution.c_factor),
         providers.Factory(mutation.SwapControlTargetMutation)
     )
@@ -166,7 +172,6 @@ class ExperimentContainer(containers.DeclarativeContainer):
     runner = providers.Factory(
         runner.ExperimentRunner,
         config=config,
-        # O test_filename é passado como um argumento nomeado para o Factory
         test_filename=config.test_filename,
         container=AppContainer
     )

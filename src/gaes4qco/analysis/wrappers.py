@@ -8,7 +8,6 @@ class BaseProfilerWrapper:
     Classe base para wrappers de profiling que propaga o acesso a atributos
     de forma transparente para o objeto decorado.
     """
-
     def __init__(self, decorated):
         self.__dict__['_decorated'] = decorated
 
@@ -27,14 +26,14 @@ class FitnessEvaluatorProfilerWrapper(BaseProfilerWrapper, IFitnessEvaluator):
 
 class FitnessShaperProfilerWrapper(BaseProfilerWrapper, IFitnessShaper):
     @profile_time
-    def shape(self, population):
-        return self._decorated.shape(population)
+    def shape(self, *args, **kwargs):
+        # Repassa todos os argumentos posicionais e nomeados
+        return self._decorated.shape(*args, **kwargs)
 
 
 class SelectionProfilerWrapper(BaseProfilerWrapper, ISelectionStrategy):
     @profile_time
     def select(self, *args, **kwargs):
-        # Repassa todos os argumentos posicionais e nomeados para o método original
         return self._decorated.select(*args, **kwargs)
 
 

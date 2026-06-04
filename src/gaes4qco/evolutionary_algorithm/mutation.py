@@ -14,7 +14,7 @@ def _reset_evaluation_flags(circuit: Circuit):
     circuit.fitness = None
     circuit.fidelity = None
     circuit._structural_key = () 
-    circuit._structural_set = None # Invalida o novo cache de conjunto
+    circuit._structural_set = None
 
 
 class RandomMutationSelector(IMutationPopulation):
@@ -132,8 +132,10 @@ class SingleGateFlipMutation(IMutationStrategy):
 
 
 class ChangeDepthMutation(IMutationStrategy):
-    def __init__(self, max_depth: int, gate_factory: GateFactory, use_evolutionary_strategy: bool):
-        self.max_depth = max_depth
+    def __init__(self, min_depth: int, max_depth: int, gate_factory: GateFactory, use_evolutionary_strategy: bool):
+        # Define valores padrão seguros caso a configuração seja None
+        self.min_depth = min_depth if min_depth is not None else 4
+        self.max_depth = max_depth if max_depth is not None else 40
         self._gate_factory = gate_factory
         self.use_evolutionary_strategy = use_evolutionary_strategy
 
@@ -145,7 +147,9 @@ class ChangeDepthMutation(IMutationStrategy):
         change = math.ceil(random_gauss) if random.random() < 0.5 else math.floor(random_gauss)
         if change == 0: change = random.choice([-1, 1])
 
-        new_depth = max(1, min(circuit.depth + change, self.max_depth))
+        new_depth = circuit.depth + change
+        new_depth = max(self.min_depth, min(new_depth, self.max_depth))
+
         actual_change = new_depth - circuit.depth
 
         if actual_change < 0:

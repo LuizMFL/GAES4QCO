@@ -9,15 +9,20 @@ from experiment.test_loader import TestConfigLoader
 
 def main():
     """
-    Entry point for running all GA experiments defined in `tests/`.
+    Ponto de entrada para executar todos os experimentos definidos em `tests/`.
     """
+    project_root = Path(__file__).resolve().parents[2]
+    log_file_path = project_root / "execution.log"
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - [%(processName)s] - %(message)s',
-        stream=sys.stdout
+        handlers=[
+            logging.FileHandler(log_file_path, mode='w'),
+            logging.StreamHandler(sys.stdout)
+        ]
     )
 
-    project_root = Path(__file__).resolve().parents[2]
     tests_dir = project_root / "tests"
 
     logging.info("🚀 Starting Quantum Circuit Evolution Experiments")
@@ -33,7 +38,6 @@ def main():
     num_processes = min(len(experiment_configs), cpu_count())
     logging.info(f"🧠 Running {len(experiment_configs)} experiments in parallel across {num_processes} processes...")
     
-    # A criação dos runners agora é delegada de volta ao ParallelExperimentManager
     manager = ParallelExperimentManager(
         configs=experiment_configs,
         filepaths=filepaths,
@@ -56,7 +60,7 @@ def main():
         logging.info(f"📄 {Path(best_run['filename']).name} | Seed {best_run['seed']} | Fitness {best_run['best_fitness']:.6f}")
 
     logging.info("\n✅ All experiments completed successfully.")
-    logging.info(f"Full log saved to {project_root / 'execution.log'}")
+    logging.info(f"Full log saved to {log_file_path}")
 
 
 if __name__ == "__main__":

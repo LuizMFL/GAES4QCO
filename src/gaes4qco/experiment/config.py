@@ -31,21 +31,23 @@ class PhaseConfig:
 class ExperimentConfig:
     """Encapsula todos os parâmetros para uma única execução do GA."""
     seed: int
-    max_depth: int
-    min_depth: int
     target_statevector_data: List[Any]
     filename_target_circuit: str
     phases: List[PhaseConfig]
     resume_from_checkpoint: bool
+    
+    # Adicionado valores padrão para robustez
+    max_depth: int = 40
+    min_depth: int = 4
+
     allowed_gates: Optional[List[str]] = None
     target_depth: int = 20
     num_qubits: int = 4
     elitism_size: int = 10
     population_size: int = 200
-    diversity_threshold: float = 0.1  # Limiar de 10%
-    injection_rate: float = 0.15  # Injeta 15% quando ativado
+    diversity_threshold: float = 0.1
+    injection_rate: float = 0.15
     
-    # Hiperparâmetros Condicionais
     tournament_size: Optional[int] = None
     crossover_rate: Optional[float] = None
     mutation_rate: Optional[float] = None
@@ -58,7 +60,6 @@ class ExperimentConfig:
     c_factor: Optional[float] = None
 
     def __post_init__(self):
-        # --- Validação e Limpeza de Hiperparâmetros Condicionais ---
         uses_fixed_rates = any(not p.use_adaptive_rates for p in self.phases)
         uses_adaptive_rates = any(p.use_adaptive_rates for p in self.phases)
         uses_tournament = any(
@@ -69,77 +70,44 @@ class ExperimentConfig:
         uses_fitness_sharing = any(p.use_fitness_sharing for p in self.phases)
         uses_stepsize = any(p.use_stepsize for p in self.phases)
 
-        # 1. Fixed Rates
-        if uses_fixed_rates:
-            if self.crossover_rate is None or self.mutation_rate is None:
-                raise ValueError("crossover_rate e mutation_rate são exigidos quando use_adaptive_rates é False em qualquer fase.")
-        else:
-            self.crossover_rate = None
-            self.mutation_rate = None
+        if uses_fixed_rates and (self.crossover_rate is None or self.mutation_rate is None):
+            raise ValueError("crossover_rate e mutation_rate são exigidos para taxas não adaptativas.")
+        
+        if uses_adaptive_rates and None in (self.min_mutation_rate, self.max_mutation_rate, self.min_crossover_rate, self.max_crossover_rate):
+            raise ValueError("min/max rates são exigidos para taxas adaptativas.")
 
-        # 2. Adaptive Rates
-        if uses_adaptive_rates:
-            if None in (self.min_mutation_rate, self.max_mutation_rate, self.min_crossover_rate, self.max_crossover_rate):
-                raise ValueError("min_mutation_rate, max_mutation_rate, min_crossover_rate e max_crossover_rate são exigidos quando use_adaptive_rates é True em qualquer fase.")
-        else:
-            self.min_mutation_rate = None
-            self.max_mutation_rate = None
-            self.min_crossover_rate = None
-            self.max_crossover_rate = None
+        if uses_tournament and self.tournament_size is None:
+            raise ValueError("tournament_size é exigido para seleção de torneio.")
 
-        # 3. Tournament Selection
-        if uses_tournament:
-            if self.tournament_size is None:
-                raise ValueError("tournament_size é exigido quando parent_selection ou survivor_selection é TOURNAMENT em qualquer fase.")
-        else:
-            self.tournament_size = None
+        if uses_fitness_sharing and (self.sharing_radius is None or self.alpha is None):
+            raise ValueError("sharing_radius e alpha são exigidos para fitness sharing.")
 
-        # 4. Fitness Sharing
-        if uses_fitness_sharing:
-            if self.sharing_radius is None or self.alpha is None:
-                raise ValueError("sharing_radius e alpha são exigidos quando use_fitness_sharing é True em qualquer fase.")
-        else:
-            self.sharing_radius = None
-            self.alpha = None
-
-        # 5. Step Size
-        if uses_stepsize:
-            if self.c_factor is None:
-                raise ValueError("c_factor é exigido quando use_stepsize é True em qualquer fase.")
-        else:
-            self.c_factor = None
-
+        if uses_stepsize and self.c_factor is None:
+            raise ValueError("c_factor é exigido para stepsize.")
 
     def get_config_foldername(self) -> Generator[str, Any, None]:
-        """Gera um nome de pasta descritivo a partir das flags de configuração."""
         for i, phase in enumerate(self.phases):
-            fit_flag = "WG" if phase.use_weighted_fitness else "FD"  # Weighted vs Fidelity-only
-            rate_flag = "AD" if phase.use_adaptive_rates else "FX"  # Adaptive vs Fixed
-            mut_flag = "BD" if phase.use_bandit_mutation else "RD"  # Bandit vs Random
-            step_flag = "ST" if phase.use_stepsize else "NR"  # Stepsize vs Normal
+            fit_flag = "WG" if phase.use_weighted_fitness else "FD"
+            rate_flag = "AD" if phase.use_adaptive_rates else "FX"
+            mut_flag = "BD" if phase.use_bandit_mutation else "RD"
+            step_flag = "ST" if phase.use_stepsize else "NR"
             select_parent_flag = phase.parent_selection.value[:2]
             select_survivor_flag = phase.survivor_selection.value[0:2]
-            fit_shaper_flag = "FT" if phase.use_fitness_sharing else "NL"  # Fitness Sharing Shaper vs Null Fitness Shaper
+            fit_shaper_flag = "FT" if phase.use_fitness_sharing else "NL"
             crossover_flag = phase.crossover_strategy[0:2]
             yield f"pha={i}_{fit_flag}_{crossover_flag}_{select_parent_flag}_{select_survivor_flag}_{rate_flag}_{mut_flag}_{step_flag}_{fit_shaper_flag}"
 
     def get_config_hash(self) -> Generator[str, Any, None]:
-        """
-        Gera um hash SHA256 curto e único para a configuração do experimento.
-        """
-        data = asdict(self).copy()
+        data = asdict(self)
         data.pop("target_statevector_data", None)
         data.pop("resume_from_checkpoint", None)
-
         if "phases" in data:
             for phase in data["phases"]:
                 phase.pop("result_filepath", None)
 
         def custom_serializer(o):
-            if is_dataclass(o):
-                return asdict(o)  # converte dataclass para dict
-            if isinstance(o, enum.Enum):
-                return o.value  # ou .value, dependendo do que você quer
+            if is_dataclass(o): return asdict(o)
+            if isinstance(o, enum.Enum): return o.value
             raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
 
         for i in range(1, len(self.phases) + 1):
@@ -157,18 +125,13 @@ class ExperimentConfig:
             yield str(folder_path / f"{config_hash}_config.json")
 
     def to_dict(self) -> dict:
-        """Converte a configuração para um dicionário, excluindo dados grandes."""
         data = asdict(self)
-        del data["target_statevector_data"]
-        del data["resume_from_checkpoint"]
-        del data["phases"]
+        data.pop("target_statevector_data", None)
+        data.pop("resume_from_checkpoint", None)
+        data.pop("phases", None)
         data.pop("config_file_path", None)
         
-        keys_to_remove = [k for k, v in data.items() if v is None and k in [
-            "tournament_size", "crossover_rate", "mutation_rate", 
-            "min_mutation_rate", "max_mutation_rate", "min_crossover_rate", 
-            "max_crossover_rate", "sharing_radius", "alpha", "c_factor"
-        ]]
+        keys_to_remove = [k for k, v in data.items() if v is None]
         for k in keys_to_remove:
             data.pop(k, None)
             

@@ -14,7 +14,6 @@ from .config import ExperimentConfig, PhaseConfig
 
 
 def save_circuit_details(circuit: Circuit, adapter: IQuantumCircuitAdapter, filepath_base: str):
-    """Salva a estrutura de um circuito em .json e sua representação em .txt."""
     with open(f"{filepath_base}.json", 'w', encoding='utf-8') as f:
         json.dump(circuit.to_dict(), f, indent=4)
     qiskit_circuit = adapter.from_domain(circuit)
@@ -27,22 +26,21 @@ def circuits_folder_path(config_file_path: Path) -> Path:
 
 
 def save_final_population(circuits: List[Circuit], adapter: IQuantumCircuitAdapter, config_file_path: Path):
-    """Salva uma lista de circuitos em uma subpasta dedicada."""
     folder_path = circuits_folder_path(config_file_path)
     folder_path.mkdir(parents=True, exist_ok=True)
-
     logging.info(f"Salvando {len(circuits)} circuitos finais em '{folder_path}'...")
-
-    circuits.sort(key=lambda c: c.fitness, reverse=True)
-    for i, circuit in enumerate(circuits):
+    valid_circuits = [c for c in circuits if c.fitness is not None]
+    if not valid_circuits:
+        logging.warning("Nenhum circuito com fitness válido para salvar.")
+        return
+    valid_circuits.sort(key=lambda c: c.fitness, reverse=True)
+    for i, circuit in enumerate(valid_circuits):
         basename = f"rank_{i:03d}_fit_{circuit.fitness:.4f}_fid_{circuit.fidelity:.4f}_depth_{circuit.depth}"
         filepath_base = str(folder_path / basename)
         save_circuit_details(circuit, adapter, filepath_base)
 
 
 class ExperimentRunner:
-    """Executa uma única instância completa de um experimento do GA."""
-
     def __init__(self, config: dict, test_filename: str, container):
         if "phases" in config and isinstance(config["phases"], list):
             for i, phase in enumerate(config["phases"]):
@@ -93,51 +91,75 @@ class ExperimentRunner:
             },
             "observer": {
                 "filename": observer_filename,
-                "test_filename": self.test_filename # Passa o nome do arquivo para o container
+                "test_filename": self.test_filename
             }
         })
 
     def run(self) -> dict:
-        logging.info(f"--- Iniciando Experimento com Seed {self.config.seed} ---")
+        logging.info(f"--- Iniciando Experimento com Seed {self.config.seed} para {self.test_filename} ---")
         start_time = time.time()
-
         random.seed(self.config.seed)
         np.random.seed(self.config.seed)
 
-        population: Population = Population()
-        result_files = []
-        for i, (phase, config_file_path_str) in enumerate(zip(self.config.phases, self.config.config_file_path)):
-            logging.info(f"--- FASE {i} ---")
-            config_file_path = Path(config_file_path_str)
-            logging.info(f"Salvando configuração do experimento em: {config_file_path}")
-            Path(config_file_path).parent.mkdir(parents=True, exist_ok=True)
-            with open(config_file_path, 'w', encoding='utf-8') as f:
-                json.dump(self.config.to_dict(), f, indent=4)
-            results_file_path = str(config_file_path).replace("_config.json", "_results.json")
-            result_files.append(results_file_path)
-            self._configure_container_for_phase(phase, results_file_path)
+        config_file_paths = list(self.config.config_file_path)
+        
+        if self.config.resume_from_checkpoint:
+            last_phase_result_path = Path(str(config_file_paths[-1]).replace("_config.json", "_results.json"))
+            if last_phase_result_path.exists():
+                logging.info(f"Experimento já concluído. Resultado final encontrado em: {last_phase_result_path}. Pulando.")
+                try:
+                    with open(last_phase_result_path, 'r') as f:
+                        final_data = json.load(f)
+                    best_fitness = final_data.get("generations", [{}])[-1].get("best_fitness", 0.0)
+                except (json.JSONDecodeError, IndexError):
+                    best_fitness = 0.0 # Fallback
+                return {
+                    "seed": self.config.seed,
+                    "best_fitness": best_fitness,
+                    "duration_seconds": 0.0
+                }
 
-            if self.config.resume_from_checkpoint:
-                checkpoint_manager = self.container.checkpoint_manager()
-                population_temp = checkpoint_manager.load_phase_checkpoint(Path(circuits_folder_path(config_file_path)))
-                if population_temp.get_individuals():
-                    population = population_temp
+        population: Population = Population()
+        
+        for i, phase in enumerate(self.config.phases):
+            logging.info(f"--- FASE {i} ---")
+            
+            config_file_path = Path(config_file_paths[i])
+            results_file_path = str(config_file_path).replace("_config.json", "_results.json")
+            
+            if self.config.resume_from_checkpoint and Path(results_file_path).exists():
+                logging.info(f"Resultado para a Fase {i} já existe. Carregando população do checkpoint.")
+                checkpoint_folder = circuits_folder_path(config_file_path)
+                checkpoint_manager = self.container.checkpoint_manager(config=self.config)
+                loaded_population = checkpoint_manager.load_phase_checkpoint(checkpoint_folder)
+                if loaded_population and loaded_population.get_individuals():
+                    population = loaded_population
                     continue
+                else:
+                    logging.warning(f"Arquivo de resultado existe, mas checkpoint em {checkpoint_folder} está vazio. Re-executando fase.")
+
             if not population.get_individuals():
+                logging.info("Criando população inicial aleatória.")
                 pop_factory = self.container.population_fac()
                 population = pop_factory.create(
                     self.config.population_size, self.config.num_qubits,
                     self.config.max_depth, self.config.min_depth, phase.use_stepsize
                 )
 
+            self._configure_container_for_phase(phase, results_file_path)
+            
+            # Salva a configuração da fase DEPOIS de configurar o container
+            logging.info(f"Salvando configuração da fase em: {config_file_path}")
+            config_file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(config_file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.config.to_dict(), f, indent=4)
+
             optimizer = self.container.optimizer()
             population = optimizer.run(population, phase.generations, phase.fidelity_threshold_stop)
 
-            logging.info("Optimization finished.")
-            final_circuits = population.get_individuals()
-
+            logging.info("Otimização da fase concluída.")
             adapter = self.container.circuit.qiskit_adapter()
-            save_final_population(final_circuits, adapter, config_file_path)
+            save_final_population(population.get_individuals(), adapter, config_file_path)
 
         end_time = time.time()
         duration = end_time - start_time
@@ -147,6 +169,5 @@ class ExperimentRunner:
         return {
             "seed": self.config.seed,
             "best_fitness": best_circuit.fitness if best_circuit else 0.0,
-            "duration_seconds": duration,
-            "result_files": result_files
+            "duration_seconds": duration
         }

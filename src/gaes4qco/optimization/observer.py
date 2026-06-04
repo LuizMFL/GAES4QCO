@@ -14,27 +14,22 @@ class JsonProgressObserver(IProgressObserver):
 
     def __init__(self, filename: str, test_filename: str = ""):
         self._filename = filename
-        self._test_filename = test_filename # Armazena o nome do arquivo de teste
+        self._test_filename = test_filename
         self._generations_data = []
         self._summary = {}
 
-    def update(self, generation: int, population: Population, mutation_rate: float = 0.0, crossover_rate: float = 0.0):
-        """Coleta os dados consolidados da população atual, ignorando indivíduos não avaliados."""
-        individuals = population.get_individuals()
-        
-        if not individuals:
-            return
-
-        evaluated_individuals = [ind for ind in individuals if ind.fitness is not None and ind.fidelity is not None]
-
+    def update(self, generation: int, population: Population, mutation_rate: float, crossover_rate: float):
+        """Coleta os dados consolidados da população atual."""
+        evaluated_individuals = [ind for ind in population.get_individuals() if ind.fitness is not None]
         if not evaluated_individuals:
             return
 
         best_individual = max(evaluated_individuals, key=lambda ind: ind.fitness)
         
         fitness_values = [ind.fitness for ind in evaluated_individuals]
-        fidelity_values = [ind.fidelity for ind in evaluated_individuals]
+        fidelity_values = [ind.fidelity for ind in evaluated_individuals if ind.fidelity is not None]
         depth_values = [ind.depth for ind in evaluated_individuals]
+        
         diversity = population.calculate_structural_diversity()
 
         gen_record = {
@@ -55,7 +50,6 @@ class JsonProgressObserver(IProgressObserver):
         self._generations_data.append(gen_record)
 
         if generation == 0 or generation % 25 == 0:
-            # Adiciona o nome do arquivo de teste ao log
             log_prefix = f"[{self._test_filename}] " if self._test_filename else ""
             logging.info(
                 f"{log_prefix}Gen {generation:04d} | Best [Fit: {gen_record['best_fitness']:.4f} | Fid: {gen_record['best_fidelity']:.4f} | Dep: {gen_record['best_depth']:03d}] "
@@ -64,7 +58,6 @@ class JsonProgressObserver(IProgressObserver):
 
     def set_summary(self, duration_seconds: float, final_generation: int, total_evaluations: int, stopping_reason: str,
                     best_circuit: Circuit):
-        """Registra o resumo final e vital da fase."""
         self._summary = {
             "phase_duration_seconds": duration_seconds,
             "total_generations_executed": final_generation,
@@ -74,7 +67,6 @@ class JsonProgressObserver(IProgressObserver):
         }
 
     def save(self):
-        """Salva os dados coletados no arquivo JSON no formato esperado pelo concatenador."""
         if not self._generations_data:
             logging.warning(f"⚠️ Nenhum dado de geração para salvar em {self._filename}.")
             return
