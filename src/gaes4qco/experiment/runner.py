@@ -1,6 +1,7 @@
 import random
 import time
 import json
+import logging
 from pathlib import Path
 from typing import List
 
@@ -14,8 +15,6 @@ from .config import ExperimentConfig, PhaseConfig
 
 def save_circuit_details(circuit: Circuit, adapter: IQuantumCircuitAdapter, filepath_base: str):
     """Salva a estrutura de um circuito em .json e sua representação em .txt."""
-    #print(f"Salvando detalhes do circuito em '{filepath_base}.json/.txt'...")
-
     with open(f"{filepath_base}.json", 'w', encoding='utf-8') as f:
         json.dump(circuit.to_dict(), f, indent=4)
     qiskit_circuit = adapter.from_domain(circuit)
@@ -29,19 +28,14 @@ def circuits_folder_path(config_file_path: Path) -> Path:
 
 def save_final_population(circuits: List[Circuit], adapter: IQuantumCircuitAdapter, config_file_path: Path):
     """Salva uma lista de circuitos em uma subpasta dedicada."""
-    # Cria um nome de pasta baseado no arquivo de resultado, ex: ".../s1111_h_abc_final_circuits/"
     folder_path = circuits_folder_path(config_file_path)
     folder_path.mkdir(parents=True, exist_ok=True)
 
-    print(f"Salvando {len(circuits)} circuitos finais em '{folder_path}'...")
+    logging.info(f"Salvando {len(circuits)} circuitos finais em '{folder_path}'...")
 
-    # Salva cada circuito individualmente
+    circuits.sort(key=lambda c: c.fitness, reverse=True)
     for i, circuit in enumerate(circuits):
-        # Ordena por fitness para que o arquivo 0 seja o melhor
-        circuits.sort(key=lambda c: c.fitness, reverse=True)
-        # O nome do arquivo inclui o rank, fitness e profundidade para fácil identificação
         basename = f"rank_{i:03d}_fit_{circuit.fitness:.4f}_fid_{circuit.fidelity:.4f}_depth_{circuit.depth}"
-
         filepath_base = str(folder_path / basename)
         save_circuit_details(circuit, adapter, filepath_base)
 
@@ -49,14 +43,13 @@ def save_final_population(circuits: List[Circuit], adapter: IQuantumCircuitAdapt
 class ExperimentRunner:
     """Executa uma única instância completa de um experimento do GA."""
 
-    def __init__(self, config: dict, container):
-        # Converte dicionários de fase em objetos PhaseConfig ANTES de criar ExperimentConfig
+    def __init__(self, config: dict, test_filename: str, container):
         if "phases" in config and isinstance(config["phases"], list):
             for i, phase in enumerate(config["phases"]):
                 if isinstance(phase, dict):
                     config["phases"][i] = PhaseConfig(**phase)
-                    
         self.config = ExperimentConfig(**config)
+        self.test_filename = test_filename
         self.container = container()
 
     def _configure_container_for_phase(self, phase_config: PhaseConfig, observer_filename: str):
@@ -99,16 +92,13 @@ class ExperimentRunner:
                 "alpha": self.config.alpha
             },
             "observer": {
-                "filename": observer_filename
+                "filename": observer_filename,
+                "test_filename": self.test_filename # Passa o nome do arquivo para o container
             }
         })
-        """Configura o container com os parâmetros de uma fase específica."""
 
     def run(self) -> dict:
-        """
-        Configura o container, executa o otimizador e retorna os resultados.
-        """
-        print(f"---   Iniciando Experimento com Seed {self.config.seed}   ---")
+        logging.info(f"--- Iniciando Experimento com Seed {self.config.seed} ---")
         start_time = time.time()
 
         random.seed(self.config.seed)
@@ -117,9 +107,9 @@ class ExperimentRunner:
         population: Population = Population()
         result_files = []
         for i, (phase, config_file_path_str) in enumerate(zip(self.config.phases, self.config.config_file_path)):
-            print(f"\n--- FASE {i} ---")
+            logging.info(f"--- FASE {i} ---")
             config_file_path = Path(config_file_path_str)
-            print(f"Salvando configuração do experimento em: {config_file_path}")
+            logging.info(f"Salvando configuração do experimento em: {config_file_path}")
             Path(config_file_path).parent.mkdir(parents=True, exist_ok=True)
             with open(config_file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.config.to_dict(), f, indent=4)
@@ -136,17 +126,14 @@ class ExperimentRunner:
             if not population.get_individuals():
                 pop_factory = self.container.population_fac()
                 population = pop_factory.create(
-                    population_size=self.config.population_size,
-                    num_qubits=self.config.num_qubits,
-                    max_depth=self.config.max_depth,
-                    min_depth=self.config.min_depth,
-                    use_evolutionary_strategy=phase.use_stepsize
+                    self.config.population_size, self.config.num_qubits,
+                    self.config.max_depth, self.config.min_depth, phase.use_stepsize
                 )
 
             optimizer = self.container.optimizer()
             population = optimizer.run(population, phase.generations, phase.fidelity_threshold_stop)
 
-            print("Optimization finished.")
+            logging.info("Optimization finished.")
             final_circuits = population.get_individuals()
 
             adapter = self.container.circuit.qiskit_adapter()
@@ -154,12 +141,12 @@ class ExperimentRunner:
 
         end_time = time.time()
         duration = end_time - start_time
-        print(f"---   Fim Experimento Seed {self.config.seed} | Duração: {duration:.2f}s   ---")
+        logging.info(f"--- Fim Experimento Seed {self.config.seed} | Duração: {duration:.2f}s ---")
 
         best_circuit = population.get_fittest()
         return {
             "seed": self.config.seed,
-            "best_fitness": best_circuit.fitness,
+            "best_fitness": best_circuit.fitness if best_circuit else 0.0,
             "duration_seconds": duration,
             "result_files": result_files
         }

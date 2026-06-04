@@ -5,15 +5,16 @@ from quantum_circuit.circuit import Circuit
 class StructuralJaccardDistance(IDistanceMetric):
     """
     Calcula a distância estrutural usando a métrica de Jaccard.
-    Ignora parâmetros de gate e usa apenas a estrutura.
+    A comparação é feita tratando cada coluna (com seus gates ordenados) como um elemento único.
     """
     @staticmethod
     def calculate(ind1: Circuit, ind2: Circuit) -> float:
-        set1 = ind1.get_structural_representation()
-        set2 = ind2.get_structural_representation()
+        # Usa o novo método com cache para obter os conjuntos diretamente
+        set_of_columns1 = ind1.get_structural_set()
+        set_of_columns2 = ind2.get_structural_set()
 
-        intersection_size = len(set1.intersection(set2))
-        union_size = len(set1.union(set2))
+        intersection_size = len(set_of_columns1.intersection(set_of_columns2))
+        union_size = len(set_of_columns1.union(set_of_columns2))
 
         if union_size == 0:
             return 0.0

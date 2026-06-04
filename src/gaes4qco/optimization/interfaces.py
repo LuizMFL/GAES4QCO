@@ -36,10 +36,6 @@ class IProgressObserver(ABC):
         pass
 
     @abstractmethod
-    def set_duration(self, duration_seconds: float, final_generation: int):
-        """Define o tempo total de execução da fase."""
-        pass
-
-    @abstractmethod
     def set_summary(self, duration_seconds: float, final_generation: int, total_evaluations: int, stopping_reason: str, best_circuit: Circuit):
+        """Define o resumo final da fase, incluindo duração e outras métricas."""
         pass

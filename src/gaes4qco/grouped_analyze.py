@@ -2,108 +2,103 @@ import json
 from pathlib import Path
 from typing import Dict, List
 import numpy as np
+from enum import Enum
 
 from analysis.circuit_error_evaluator import CircuitErrorEvaluator
-from analysis.loader import JsonDataLoader
-from analysis.plotter import (
-    EvolutionPlotter,
-    FidelityDepthPlotter,
-    ErrorRatePlotter, GroupErrorRatePlotter,
-)
+from analysis.plotter import GroupErrorRatePlotter
 from containers import AppContainer
-from experiment.runner import circuits_folder_path
-from analysis.utils import dataclass_to_primitive
+from experiment.test_loader import TestConfigLoader
 from experiment.config import ExperimentConfig
 
-
 PROJECT_PATH = Path(__file__).parents[2]
+RESULTS_DIR = PROJECT_PATH / "results"
 
+# Campos a serem ignorados ao criar a assinatura de um grupo de configuração
+IGNORED_FIELDS_FOR_GROUPING = {
+    "seed", "seed_target", "filename_target_circuit", 
+    "config_file_path", "phases", "target_statevector_data", "resume_from_checkpoint"
+}
 
-# Campos ignorados na definição do “grupo-base”
-IGNORED_FIELDS = {"seed", "seed_target", "filename_target_circuit"}
-
-
-def load_json(path: Path) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def base_signature(config_dict: dict) -> dict:
+def get_group_signature(config: ExperimentConfig) -> str:
     """
-    Remove seed, seed_target e filename_target_circuit.
-    O restante define a identidade da configuração.
+    Cria uma assinatura única para uma configuração de experimento, ignorando as sementes e dados de execução.
     """
-    return {k: v for k, v in config_dict.items() if k not in IGNORED_FIELDS}
+    from dataclasses import asdict
+    
+    d = asdict(config)
+    
+    # Remove campos voláteis ou específicos da semente
+    for key in IGNORED_FIELDS_FOR_GROUPING:
+        d.pop(key, None)
+        
+    # A assinatura das fases é baseada em suas configurações, não nos caminhos de resultado
+    phase_signatures = []
+    for phase in config.phases:
+        phase_dict = asdict(phase)
+        phase_dict.pop("result_filepath", None)
+        # Converte Enums para seus valores de string dentro de cada fase
+        for k, v in phase_dict.items():
+            if isinstance(v, Enum):
+                phase_dict[k] = v.value
+        phase_signatures.append(tuple(sorted(phase_dict.items())))
+        
+    d["phases"] = tuple(phase_signatures)
+    
+    # Função auxiliar para o json.dumps lidar com qualquer Enum que possa ter sobrado
+    def enum_serializer(obj):
+        if isinstance(obj, Enum):
+            return obj.value
+        raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+    # Converte para uma string canônica para usar como chave de dicionário
+    return json.dumps(d, sort_keys=True, default=enum_serializer)
 
 
 def main():
     """
-    Nova versão do analisador:
-    - Agrupa experimentos pela pasta base gerada pelo ExperimentConfig.
-    - Cada pasta contém diferentes seeds da mesma configuração.
-    - Avaliação é feita ao nível do grupo (configuração geral).
+    Analisa os resultados agrupando experimentos com a mesma configuração base (ignorando a semente).
+    Calcula métricas agregadas por grupo para determinar a melhor configuração de hiperparâmetros.
     """
-
     container = AppContainer()
     container.config.from_dict({"num_qubits": ExperimentConfig.num_qubits})
     qc_container = container.circuit()
 
-    results_root = PROJECT_PATH / "results"
-    grouped_roots = [p for p in results_root.iterdir() if p.is_dir() and "pha=" in p.name]
-
-    plots_dir = PROJECT_PATH / "results" / "grouped_plots"
+    tests_dir = PROJECT_PATH / "tests"
+    plots_dir = RESULTS_DIR / "grouped_plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
 
-    json_loader = JsonDataLoader()
-    evo_plotter = EvolutionPlotter()
-    fid_plotter = FidelityDepthPlotter()
-    error_plotter = GroupErrorRatePlotter()
+    # --- 1. Carregar e Agrupar todos os Testes ---
+    loader = TestConfigLoader(tests_dir)
+    all_configs, all_filenames = loader.load_all(update_json=False)
 
+    groups: Dict[str, List[ExperimentConfig]] = {}
+    for config in all_configs:
+        signature = get_group_signature(config)
+        groups.setdefault(signature, []).append(config)
+
+    print(f"Encontrados {len(all_configs)} testes, agrupados em {len(groups)} configurações-base.")
+
+    # --- 2. Processar cada Grupo ---
     group_metrics = []
+    for signature, configs_in_group in groups.items():
+        first_config = configs_in_group[0]
+        
+        # Gera um nome legível para o grupo a partir do nome do primeiro arquivo de teste
+        group_name = Path(all_filenames[all_configs.index(first_config)]).stem
+        
+        print(f"\n📁 Avaliando grupo: {group_name} ({len(configs_in_group)} seeds)")
 
-    print(f"Encontradas {len(grouped_roots)} pastas de configuração-base.")
-
-    # ------------------------------------------------------------
-    # PROCESSAMENTO DE CADA GRUPO
-    # ------------------------------------------------------------
-    for group_dir in grouped_roots:
-        print(f"\n📁 Avaliando grupo: {group_dir.name}")
-
-        # A pasta possui vários experimentos: uuid_config.json, uuid_results.json, uuid_circuits/
-        exp_configs = sorted(group_dir.glob("*_config.json"))
-        exp_results = sorted(group_dir.glob("*_results.json"))
-
-        if not exp_configs or not exp_results:
-            print("⚠️ Nenhum conjunto válido encontrado neste grupo.")
-            continue
-
-        # Todos os filhos possuem a mesma configuração-base (exceto seeds)
-        first_cfg = load_json(exp_configs[0])
-        base_cfg = base_signature(first_cfg)
-
-        # Determinar K-elite da configuração original
-        elitism_size = first_cfg.get("elitism_size", 1)
-
-        # Instância do avaliador (usa target de cada seed!)
+        elitism_size = first_config.elitism_size
         evaluator_cache: Dict[str, CircuitErrorEvaluator] = {}
+        
+        seed_errors, seed_variances, seed_bests = [], [], []
 
-        # ------------------------------------------------------------
-        # MÉTRICAS POR SEED
-        # ------------------------------------------------------------
-        seed_errors = []     # média da elite de cada seed
-        seed_variances = []  # variância interna
-        seed_best = []       # melhor indivíduo da seed
-
-        for cfg_path, res_path in zip(exp_configs, exp_results):
-            cfg = load_json(cfg_path)
-
-            seed = cfg["seed"]
-            filename_target = cfg["filename_target_circuit"]
-            target_path = (PROJECT_PATH / filename_target).with_suffix(".json")
-
-            # Cache para evitar recarregar o mesmo statevector
-            if filename_target not in evaluator_cache:
-                evaluator_cache[filename_target] = CircuitErrorEvaluator(
+        # --- 3. Processar cada Seed dentro do Grupo ---
+        for config in configs_in_group:
+            target_path = (PROJECT_PATH / config.filename_target_circuit).with_suffix(".json")
+            
+            if config.filename_target_circuit not in evaluator_cache:
+                evaluator_cache[config.filename_target_circuit] = CircuitErrorEvaluator(
                     target_circuit_path=target_path,
                     circuit_factory=qc_container.circuit_factory(),
                     qiskit_adapter=qc_container.qiskit_adapter(),
@@ -111,80 +106,75 @@ def main():
                     shots=2 ** 10,
                     verbose=False,
                 )
+            evaluator = evaluator_cache[config.filename_target_circuit]
 
-            evaluator = evaluator_cache[filename_target]
+            # Reconstrói o caminho para a pasta de circuitos da última fase
+            folder_names = list(config.get_config_foldername())
+            hashes = list(config.get_config_hash())
+            
+            current_path = RESULTS_DIR
+            for i in range(len(config.phases)):
+                current_path = current_path / folder_names[i]
+            
+            final_circuits_folder = current_path / f"{hashes[-1]}_circuits"
 
-            # Descobrir a pasta dos circuitos desta seed
-            circuits_folder = circuits_folder_path(Path(cfg_path))
-            circuit_files = sorted(circuits_folder.glob("*.json"))
+            if not final_circuits_folder.exists():
+                print(f"  ⚠️ Seed {config.seed}: Pasta de circuitos finais não encontrada em {final_circuits_folder}")
+                continue
+
+            circuit_files = sorted(final_circuits_folder.glob("*.json"))
             if not circuit_files:
-                print(f"⚠️ Nenhum circuito final encontrado em {circuits_folder}")
                 continue
 
-            print(f"  🔍 Seed {seed}: avaliando {len(circuit_files)} circuitos…")
-            errs = []
-            for c in circuit_files:
-                try:
-                    e = evaluator.evaluate_circuit(c)
-                    errs.append(e)
-                except Exception as err:
-                    print(f"⚠️ Erro ao avaliar {c.name}: {err}")
-
-            if not errs:
+            print(f"  🔍 Seed {config.seed}: avaliando {len(circuit_files)} circuitos…")
+            errors = [evaluator.evaluate_circuit(c) for c in circuit_files]
+            
+            if not errors:
                 continue
 
-            errs = sorted(errs)
-            elite = errs[:elitism_size]
+            errors = sorted(errors)
+            elite_errors = errors[:elitism_size]
+            
+            seed_errors.append(float(np.mean(elite_errors)))
+            seed_variances.append(float(np.var(errors)))
+            seed_bests.append(float(np.min(errors)))
 
-            seed_errors.append(float(np.mean(elite)))
-            seed_variances.append(float(np.var(errs)))
-            seed_best.append(float(np.min(errs)))
-
-        # ------------------------------------------------------------
-        # AGREGAÇÃO FINAL DO GRUPO
-        # ------------------------------------------------------------
+        # --- 4. Agregar Métricas do Grupo ---
         if not seed_errors:
-            print("⚠️ Grupo sem resultados suficientes.")
+            print("  ⚠️ Grupo sem resultados suficientes para análise.")
             continue
 
         aggregated = {
-            "group_name": group_dir.name,
+            "group_name": group_name,
             "mean_elite_seed": float(np.mean(seed_errors)),
             "std_elite_seed": float(np.std(seed_errors)),
             "mean_variance_across_seeds": float(np.mean(seed_variances)),
-            "best_individual_overall": float(np.min(seed_best)),
+            "best_individual_overall": float(np.min(seed_bests)),
             "num_seeds": len(seed_errors),
             "elitism_size": elitism_size,
         }
-
-        print(f"  ✅ Grupo {group_dir.name}: média elite-seed = {aggregated['mean_elite_seed']:.6f}")
         group_metrics.append(aggregated)
+        print(f"  ✅ Média do erro da elite no grupo: {aggregated['mean_elite_seed']:.6f}")
 
-    # ------------------------------------------------------------
-    #     RANKING ENTRE CONFIGURAÇÕES
-    # ------------------------------------------------------------
-
+    # --- 5. Ranking e Plot Final ---
     if not group_metrics:
-        print("⚠️ Nenhuma métrica agregada encontrada.")
+        print("\n⚠️ Nenhuma métrica de grupo calculada. Encerrando.")
         return
 
-    # Ordenação pela métrica principal: média da elite por seed
     group_metrics.sort(key=lambda g: g["mean_elite_seed"])
 
-    print("\n🏆 TOP CONFIGURAÇÕES GERAIS (Fase 2)")
+    print("\n🏆 TOP CONFIGURAÇÕES GERAIS")
     for i, g in enumerate(group_metrics[:5], 1):
-        print(f"#{i} | {g['group_name']} | elite-seed = {g['mean_elite_seed']:.6e}")
+        print(f"#{i} | {g['group_name']} | Erro médio da elite = {g['mean_elite_seed']:.6e}")
 
-    # Salvar JSON
-    ranking_path = plots_dir / "ranking_groups_fase2.json"
+    ranking_path = plots_dir / "ranking_grupos.json"
     with open(ranking_path, "w", encoding="utf-8") as f:
         json.dump(group_metrics, f, indent=4)
+    print(f"💾 Ranking de grupos salvo em {ranking_path}")
 
-    print(f"💾 Ranking salvo em {ranking_path}")
-
-    # Plot comparativo
+    error_plotter = GroupErrorRatePlotter()
     error_plot_path = plots_dir / "error_rate_comparison_groups.png"
-    error_plotter.plot(group_metrics, str(error_plot_path), top_only=False)
+    error_plotter.plot(group_metrics, str(error_plot_path))
 
     print("\n✅ Análise agrupada concluída com sucesso!")
 

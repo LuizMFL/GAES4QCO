@@ -1,6 +1,6 @@
 import random
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 from enum import Enum
 
 from quantum_circuit.circuit import Circuit
@@ -12,20 +12,28 @@ class SelectionType(Enum):
     TOURNAMENT = "tournament"
     ROULETTE = "roulette"
     NSGA2 = "nsga2"
+    RANDOM = "random"
+
+
+def _get_evaluated_individuals(population: Population) -> List[Circuit]:
+    """Helper para retornar apenas indivíduos que já foram avaliados."""
+    return [ind for ind in population.get_individuals() if ind.fitness is not None]
 
 
 class TournamentParentSelection(ISelectionStrategy):
-    def __init__(self, population_size: int, tournament_size: int):
-        self.population_size = population_size
+    def __init__(self, tournament_size: int):
         self.tournament_size = tournament_size
 
-    def select(self, population: Population) -> Population:
-        if not population:
+    def select(self, population: Population, num_to_select: Optional[int] = None) -> Population:
+        individuals = _get_evaluated_individuals(population)
+        if not individuals:
             return Population()
+        
+        # Se num_to_select não for fornecido, assume o tamanho da população atual
+        k = num_to_select if num_to_select is not None else len(individuals)
 
-        individuals = population.get_individuals()
         next_gen_parents = []
-        for _ in range(self.population_size):
+        for _ in range(k):
             group = random.sample(individuals, min(self.tournament_size, len(individuals)))
             champion = max(group, key=lambda ind: ind.fitness)
             next_gen_parents.append(champion)
@@ -38,17 +46,16 @@ class TournamentSurvivorSelection(ISelectionStrategy):
         self.tournament_size = tournament_size
         self.elitism_count = elitism_count
 
-    def select(self, population: Population) -> Population:
-        if not population:
+    def select(self, population: Population, num_to_select: Optional[int] = None) -> Population:
+        individuals = _get_evaluated_individuals(population)
+        if not individuals:
             return Population()
 
-        individuals = population.get_individuals()
-        sorted_population = sorted(individuals, key=lambda ind: ind.fidelity, reverse=True)
-
-        elites = sorted_population[:self.elitism_count]
-        competitors = sorted_population[self.elitism_count:]
+        individuals.sort(key=lambda ind: ind.fitness, reverse=True)
+        elites = individuals[:self.elitism_count]
+        competitors = individuals[self.elitism_count:]
         survivors = elites[:]
-
+        
         while len(survivors) < self.population_size and competitors:
             group = random.sample(competitors, min(self.tournament_size, len(competitors)))
             champion = max(group, key=lambda ind: ind.fitness)
@@ -59,14 +66,13 @@ class TournamentSurvivorSelection(ISelectionStrategy):
 
 
 class RandomParentSelection(ISelectionStrategy):
-    def __init__(self, population_size: int):
-        self.population_size = population_size
-
-    def select(self, population: Population) -> Population:
-        if not population:
+    def select(self, population: Population, num_to_select: Optional[int] = None) -> Population:
+        individuals = _get_evaluated_individuals(population)
+        if not individuals:
             return Population()
-        individuals = population.get_individuals()
-        selected = random.choices(individuals, k=self.population_size)
+        
+        k = num_to_select if num_to_select is not None else len(individuals)
+        selected = random.choices(individuals, k=k)
         return Population(selected)
 
 
@@ -75,33 +81,39 @@ class RandomSurvivorSelection(ISelectionStrategy):
         self.population_size = population_size
         self.elitism_count = elitism_count
 
-    def select(self, population: Population) -> Population:
-        if not population:
+    def select(self, population: Population, num_to_select: Optional[int] = None) -> Population:
+        individuals = _get_evaluated_individuals(population)
+        if not individuals:
             return Population()
 
-        individuals = population.get_individuals()
-        elites = sorted(individuals, key=lambda ind: ind.fidelity, reverse=True)[:self.elitism_count]
-        remaining_slots = self.population_size - len(elites)
-        survivors = elites + random.sample(individuals, min(remaining_slots, len(individuals)))
-        return Population(survivors)
+        individuals.sort(key=lambda ind: ind.fitness, reverse=True)
+        elites = individuals[:self.elitism_count]
+        
+        competitors = [ind for ind in individuals if ind not in elites]
+        num_to_select_randomly = self.population_size - len(elites)
+        
+        if num_to_select_randomly <= 0:
+            return Population(elites)
+            
+        random_survivors = random.sample(competitors, min(num_to_select_randomly, len(competitors)))
+        
+        return Population(elites + random_survivors)
 
 
 class RouletteParentSelection(ISelectionStrategy):
-    def __init__(self, population_size: int):
-        self.population_size = population_size
-
-    def select(self, population: Population) -> Population:
-        if not population:
+    def select(self, population: Population, num_to_select: Optional[int] = None) -> Population:
+        individuals = _get_evaluated_individuals(population)
+        if not individuals:
             return Population()
 
-        individuals = population.get_individuals()
+        k = num_to_select if num_to_select is not None else len(individuals)
+        
         total_fitness = sum(ind.fitness for ind in individuals)
         if total_fitness == 0:
-            # fallback: random uniforme
-            selected = random.choices(individuals, k=self.population_size)
+            selected = random.choices(individuals, k=k)
         else:
             weights = [ind.fitness / total_fitness for ind in individuals]
-            selected = random.choices(individuals, weights=weights, k=self.population_size)
+            selected = random.choices(individuals, weights=weights, k=k)
         return Population(selected)
 
 
@@ -110,61 +122,51 @@ class RouletteSurvivorSelection(ISelectionStrategy):
         self.population_size = population_size
         self.elitism_count = elitism_count
 
-    def select(self, population: Population) -> Population:
-        if not population:
+    def select(self, population: Population, num_to_select: Optional[int] = None) -> Population:
+        individuals = _get_evaluated_individuals(population)
+        if not individuals:
             return Population()
 
-        individuals = population.get_individuals()
-        elites = sorted(individuals, key=lambda ind: ind.fidelity, reverse=True)[:self.elitism_count]
-
+        individuals.sort(key=lambda ind: ind.fitness, reverse=True)
+        elites = individuals[:self.elitism_count]
+        
         competitors = [ind for ind in individuals if ind not in elites]
+        num_to_select_roulette = self.population_size - len(elites)
+        if num_to_select_roulette <= 0:
+            return Population(elites)
+
         total_fitness = sum(ind.fitness for ind in competitors)
-
-        survivors = list(elites)
-
-        if total_fitness == 0:
-            survivors.extend(random.choices(competitors, k=self.population_size - len(survivors)))
+        if total_fitness == 0 or not competitors:
+            selected = random.choices(competitors, k=num_to_select_roulette) if competitors else []
         else:
             weights = [ind.fitness / total_fitness for ind in competitors]
-            survivors.extend(random.choices(competitors, weights=weights, k=self.population_size - len(survivors)))
-
-        return Population(survivors)
+            selected = random.choices(competitors, weights=weights, k=num_to_select_roulette)
+            
+        return Population(elites + selected)
 
 
 class IMultiObjectiveService(ABC):
-    """
-    Interface for multi-objective optimization services.
-    Defines the contract for non-dominated sorting, Pareto dominance,
-    and crowding distance assignment.
-    """
-
     @abstractmethod
     def non_dominated_sort(self, individuals: List[Circuit]) -> List[List[Circuit]]:
-        """Perform non-dominated sorting and return Pareto fronts."""
         pass
 
     @abstractmethod
     def dominates(self, p: Circuit, q: Circuit) -> bool:
-        """Return True if p Pareto-dominates q."""
         pass
 
     @abstractmethod
     def crowding_distance_assignment(self, front: List[Circuit]) -> None:
-        """Assign crowding distances to individuals in a given front."""
         pass
 
 
 class NSGA2Service(IMultiObjectiveService):
-    """Core NSGA-II operators (non-dominated sort, dominance check, crowding distance)."""
-
     def non_dominated_sort(self, individuals: List[Circuit]) -> List[List[Circuit]]:
         fronts = [[]]
         for p in individuals:
             p.domination_count = 0
             p.dominated_solutions = []
             for q in individuals:
-                if p is q:
-                    continue
+                if p is q: continue
                 if self.dominates(p, q):
                     p.dominated_solutions.append(q)
                 elif self.dominates(q, p):
@@ -194,8 +196,7 @@ class NSGA2Service(IMultiObjectiveService):
         return at_least_one_better and none_worse
 
     def crowding_distance_assignment(self, front: List[Circuit]):
-        if not front:
-            return
+        if not front: return
         for ind in front:
             ind.crowding_distance = 0.0
         num_objectives = len(front[0].objectives)
@@ -205,39 +206,35 @@ class NSGA2Service(IMultiObjectiveService):
             front[-1].crowding_distance = float('inf')
             min_obj, max_obj = front[0].objectives[m], front[-1].objectives[m]
             range_obj = max_obj - min_obj
-            if range_obj == 0:
-                continue
+            if range_obj == 0: continue
             for i in range(1, len(front) - 1):
                 distance = front[i + 1].objectives[m] - front[i - 1].objectives[m]
                 front[i].crowding_distance += distance / range_obj
 
 
 class NSGA2SurvivorSelection(ISelectionStrategy):
-    def __init__(self, population_size: int, elitism_count: int, nsga2_service: IMultiObjectiveService):
+    def __init__(self, population_size: int, nsga2_service: IMultiObjectiveService, elitism_count: int = 0):
         self.population_size = population_size
-        self.elitism_count = max(elitism_count, 1)
         self._nsga2 = nsga2_service
 
-    def select(self, population: Population) -> Population:
-        individuals = population.get_individuals()
+    def select(self, population: Population, num_to_select: Optional[int] = None) -> Population:
+        individuals = _get_evaluated_individuals(population)
         if not individuals:
             return Population()
 
-        sorted_by_fidelity = sorted(individuals, key=lambda ind: ind.fidelity, reverse=True)
-        elites = sorted_by_fidelity[:self.elitism_count]
+        final_pop_size = self.population_size
+        
+        fronts = self._nsga2.non_dominated_sort(individuals)
 
-        remaining = sorted_by_fidelity[self.elitism_count:]
-        fronts = self._nsga2.non_dominated_sort(remaining)
-
-        survivors = list(elites)
+        survivors = []
         for front in fronts:
-            if len(survivors) + len(front) <= self.population_size:
+            if len(survivors) + len(front) <= final_pop_size:
                 survivors.extend(front)
             else:
                 self._nsga2.crowding_distance_assignment(front)
                 front.sort(key=lambda x: x.crowding_distance, reverse=True)
-                needed = self.population_size - len(survivors)
+                needed = final_pop_size - len(survivors)
                 survivors.extend(front[:needed])
                 break
-
+        
         return Population(survivors)

@@ -1,5 +1,5 @@
-from typing import List, Optional
-
+from typing import List, Optional, Dict, Tuple
+import logging
 import time
 
 from evolutionary_algorithm.population_factory import PopulationFactory
@@ -11,36 +11,34 @@ from .interfaces import IFitnessEvaluator, IProgressObserver, IFitnessShaper
 
 class Optimizer:
     """
-    ## O motor do Algoritmo Genético. Orquestra todo o processo evolucionário.
-    ## É configurado com interfaces, não com classes concretas.
+    O motor do Algoritmo Genético, implementando um modelo geracional com elitismo.
     """
 
     def __init__(
             self,
             fitness_evaluator: IFitnessEvaluator,
             parent_selection: ISelectionStrategy,
-            survivor_selection: ISelectionStrategy,
             crossover: IPopulationCrossover,
             mutation: IMutationPopulation,
             population_factory: PopulationFactory,
             rate_adapter: IRateAdapter,
-            diversity_threshold: float,
-            injection_rate: float,
             fitness_shaper: IFitnessShaper,
-            observer: IProgressObserver
+            observer: IProgressObserver,
+            elitism_size: int,
+            population_size: int,
+            **kwargs 
     ):
         self._fitness_evaluator = fitness_evaluator
         self._parent_selection = parent_selection
-        self._survivor_selection = survivor_selection
         self._crossover = crossover
         self._mutation = mutation
-        self._population_factory = population_factory
         self._rate_adapter = rate_adapter
-        self._diversity_threshold = diversity_threshold
-        self._injection_rate = injection_rate
         self._fitness_shaper = fitness_shaper
         self._observer = observer
+        self._elitism_size = elitism_size
+        self._population_size = population_size
         self._total_evaluations = 0
+        self._fitness_cache: Dict[Tuple, Tuple[float, float]] = {}
 
     def run(
             self,
@@ -49,75 +47,99 @@ class Optimizer:
             fidelity_threshold: Optional[float]
     ) -> Population:
         """
-        Executa o fluxo do algoritmo genético por um número de gerações.
+        Executa o fluxo do algoritmo genético usando um modelo geracional com elitismo.
         """
         phase_start_time = time.time()
         self._total_evaluations = 0
+        self._fitness_cache.clear()
         current_population = initial_population
         stopping_reason = "max_generations_reached"
 
-        print("Evaluating initial population...")
+        logging.info("Evaluating initial population...")
         self._evaluate_population(current_population)
 
-        actual_generations = 0
-
         for gen in range(max_generations):
-            actual_generations = gen
-
             if self._observer:
-                self._observer.update(gen, current_population, self._mutation.mutation_rate, self._crossover.crossover_rate)
+                self._observer.update(gen, current_population, getattr(self._mutation, 'mutation_rate', 0), getattr(self._crossover, 'crossover_rate', 0))
+
+            # 1. Elitismo: Os melhores indivíduos são copiados diretamente para a próxima geração.
+            current_population.get_individuals().sort(key=lambda ind: ind.fitness, reverse=True)
+            elites = current_population.get_individuals()[:self._elitism_size]
+
+            # 2. Geração de Filhos para preencher o resto da população
+            num_offspring_to_create = self._population_size - len(elites)
+            
+            # Adapta taxas
             current_diversity = current_population.calculate_structural_diversity()
             current_rates = self._rate_adapter.adapt(current_diversity)
             self._crossover.crossover_rate = current_rates.crossover_rate
             self._mutation.mutation_rate = current_rates.mutation_rate
-            # 1. Seleção dos Pais
-            parent_population = self._parent_selection.select(current_population)
+            
+            # Loop de reprodução
+            offspring = []
+            while len(offspring) < num_offspring_to_create:
+                # Seleciona pais
+                parents = self._parent_selection.select(current_population, num_to_select=2).get_individuals()
+                
+                # Aplica Crossover
+                children = self._crossover.run(Population(parents)).get_individuals()
+                
+                # Aplica Mutação
+                mutated_children = self._mutation.mutate(Population(children)).get_individuals()
+                
+                offspring.extend(mutated_children)
 
-            # 2. Cruzamento
-            offspring_population = self._crossover.run(parent_population)
+            # Pega o número exato de filhos necessários
+            final_offspring = offspring[:num_offspring_to_create]
+            
+            # 3. Avalia apenas os novos filhos
+            self._evaluate_population(Population(final_offspring))
+            
+            # 4. Nova Geração: A nova população é a elite + os novos filhos
+            current_population = Population(elites + final_offspring)
 
-            # 3. Mistura a antiga população com a nova, evitando duplicatas
-            offspring_population = Population(offspring_population.get_individuals() + current_population.get_individuals())
-            population_without_duplicates = offspring_population.without_duplicates()
-
-            # 4. Mutação
-            mutated_population = self._mutation.mutate(population_without_duplicates)
-
-            # 5. Avaliação dos novos indivíduos
-            self._evaluate_population(mutated_population)
-
-            current_population = self._survivor_selection.select(mutated_population)
-
+            # 5. Condição de Parada
             if fidelity_threshold:
                 best_ind = current_population.get_fittest()
-                if best_ind and best_ind.fidelity >= fidelity_threshold:
-                    print(f"  -> Limiar de Fidelidade {fidelity_threshold} atingido na geração {gen}. Finalizando fase.")
+                if best_ind and best_ind.fidelity is not None and best_ind.fidelity >= fidelity_threshold:
+                    logging.info(f"  -> Limiar de Fidelidade {fidelity_threshold} atingido na geração {gen}. Finalizando fase.")
+                    stopping_reason = "fidelity_threshold_reached"
                     break
-
+        
+        final_gen_index = max_generations if stopping_reason == "max_generations_reached" else gen + 1
         phase_duration = time.time() - phase_start_time
 
         if self._observer:
-            final_gen_index = actual_generations + 1
             self._observer.update(final_gen_index, current_population, self._mutation.mutation_rate, self._crossover.crossover_rate)
             best_circuit = current_population.get_fittest()
-            self._observer.set_summary(
-                duration_seconds=phase_duration,
-                final_generation=final_gen_index,
-                total_evaluations=self._total_evaluations,
-                stopping_reason=stopping_reason,
-                best_circuit=best_circuit
-            )
-            self._observer.set_duration(phase_duration, final_gen_index)
-            self._observer.save()
+            if best_circuit:
+                self._observer.set_summary(
+                    duration_seconds=phase_duration,
+                    final_generation=final_gen_index,
+                    total_evaluations=self._total_evaluations,
+                    stopping_reason=stopping_reason,
+                    best_circuit=best_circuit
+                )
+                self._observer.save()
 
         return current_population
 
     def _evaluate_population(self, population: Population):
-        """
-        ## Helper para calcular o fitness de cada indivíduo que ainda não foi avaliado.
-        ## Substitui a antiga função 'applyFitnessIntoCircuit'.
-        """
+        evaluated_count = 0
         for individual in population.get_individuals():
-            individual.fitness, individual.fidelity = self._fitness_evaluator.evaluate(individual)
-            self._total_evaluations += 1
+            if individual.fitness is not None:
+                continue
+
+            evaluated_count += 1
+            key = individual.get_structural_key()
+            if key in self._fitness_cache:
+                individual.fitness, individual.fidelity = self._fitness_cache[key]
+            else:
+                individual.fitness, individual.fidelity = self._fitness_evaluator.evaluate(individual)
+                self._fitness_cache[key] = (individual.fitness, individual.fidelity)
+                self._total_evaluations += 1
+        
+        if evaluated_count > 0:
+            logging.debug(f"Evaluated {evaluated_count} new individuals.")
+        
         self._fitness_shaper.shape(population)

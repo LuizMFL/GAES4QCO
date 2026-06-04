@@ -267,8 +267,12 @@ class FidelityDepthPlotter(IPlotter):
         std_depth = np.array(data.std_dev_depth_per_generation or np.zeros_like(std_fid))
         best_depth = np.array(data.max_depth_per_generation or np.zeros_like(avg_fid))
 
-        lower_depth = np.maximum(config_info["min_depth"], avg_depth - std_depth)
-        upper_depth = np.minimum(config_info["max_depth"], avg_depth + std_depth)
+        # Acesso defensivo ao config_info
+        min_d = config_info.get("min_depth", 0) if isinstance(config_info, dict) else 0
+        max_d = config_info.get("max_depth", 40) if isinstance(config_info, dict) else 40
+
+        lower_depth = np.maximum(min_d, avg_depth - std_depth)
+        upper_depth = np.minimum(max_d, avg_depth + std_depth)
 
         # === Layout ===
         fig = plt.figure(figsize=(14, 9))
@@ -296,7 +300,7 @@ class FidelityDepthPlotter(IPlotter):
         ax2.fill_between(generations, lower_depth, upper_depth, alpha=0.25, color=color_depth)
         ax2.tick_params(axis='y', labelcolor=color_depth)
         ax2.grid(True, which='both', linestyle=":", linewidth=0.5)
-        ax2.set_ylim(config_info["min_depth"], config_info["max_depth"])
+        ax2.set_ylim(min_d, max_d)
         ax2.set_xlim(0, data.generation_count)
 
         # === Marcação das Phases ===

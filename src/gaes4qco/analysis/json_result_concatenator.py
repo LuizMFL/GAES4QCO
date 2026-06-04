@@ -28,39 +28,57 @@ class JsonResultConcatenator(IJsonResultConcatenator):
         self.output_dir = self.results_dir / "concatenated"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
+    def _reconstruct_result_paths(self, config: ExperimentConfig) -> List[Path]:
+        """
+        Usa a mesma lógica do ExperimentConfig para reconstruir os caminhos dos arquivos de resultado.
+        """
+        paths = []
+        folder_names = list(config.get_config_foldername())
+        hashes = list(config.get_config_hash())
+
+        current_path = self.results_dir
+        for i in range(len(config.phases)):
+            folder_name = folder_names[i]
+            config_hash = hashes[i]
+            
+            phase_path = current_path / folder_name
+            result_file = phase_path / f"{config_hash}_results.json"
+            
+            if result_file.exists():
+                paths.append(result_file)
+            else:
+                print(f"⚠️ Aviso: Arquivo de resultado não encontrado: {result_file}")
+            
+            current_path = phase_path
+            
+        return paths
+
     def _concat_result_data(self, result_data_list: List[ResultData]) -> ResultData:
         """
-        Concatena dados de várias phases em um único ResultData contínuo.
+        Concatena os dados de séries temporais de várias fases em um único ResultData.
         """
-        fitness_all = []
-        diversity_all = []
-        fidelity_all = []
-        depth_all = []
+        concatenated_data = ResultData()
         for rd in result_data_list:
-            fitness_all.extend(rd.fitness_per_generation)
-            diversity_all.extend(rd.structural_diversity_per_generation)
-            fidelity_all.extend(rd.fidelity_per_generation)
-            depth_all.extend(rd.depth_per_generation)
+            concatenated_data.best_fitness_per_generation.extend(rd.best_fitness_per_generation)
+            concatenated_data.average_fitness_per_generation.extend(rd.average_fitness_per_generation)
+            concatenated_data.std_dev_fitness_per_generation.extend(rd.std_dev_fitness_per_generation)
+            
+            concatenated_data.best_fidelity_per_generation.extend(rd.best_fidelity_per_generation)
+            concatenated_data.average_fidelity_per_generation.extend(rd.average_fidelity_per_generation)
+            concatenated_data.std_dev_fidelity_per_generation.extend(rd.std_dev_fidelity_per_generation)
 
-        return ResultData(
-            fitness_per_generation=fitness_all,
-            structural_diversity_per_generation=diversity_all,
-            fidelity_per_generation=fidelity_all,
-            depth_per_generation=depth_all
-        )
+            concatenated_data.best_depth_per_generation.extend(rd.best_depth_per_generation)
+            concatenated_data.average_depth_per_generation.extend(rd.average_depth_per_generation)
+            concatenated_data.std_dev_depth_per_generation.extend(rd.std_dev_depth_per_generation)
+            
+            concatenated_data.structural_diversity_per_generation.extend(rd.structural_diversity_per_generation)
+        return concatenated_data
 
     def process_single_test(self, config: ExperimentConfig, test_filename: str) -> Path:
         """
         Gera um único arquivo concatenado para um test.json específico.
         """
-        result_files = []
-        for p in config.phases:
-            if p.result_filepath:
-                abs_path = PROJECT_PATH / p.result_filepath
-                if abs_path.exists():
-                    result_files.append(abs_path)
-                else:
-                    print(f"⚠️ Aviso: Arquivo de resultado não encontrado: {abs_path}")
+        result_files = self._reconstruct_result_paths(config)
         
         if not result_files:
             print(f"⚠️ Nenhum resultado válido encontrado para {test_filename}")
@@ -68,21 +86,13 @@ class JsonResultConcatenator(IJsonResultConcatenator):
 
         print(f"🔗 Concatenando {len(result_files)} fases para {test_filename}...")
 
-        # Carrega todos os dados
         result_data_list = [self.data_loader.load(str(f)) for f in result_files]
-
-        # Concatena
         concatenated = self._concat_result_data(result_data_list)
 
-        # Salva em um novo arquivo
-        output_path = self.output_dir / f"{test_filename.replace('.json', '')}_concatenated_result.json"
+        output_path = self.output_dir / f"{Path(test_filename).stem}_concatenated_result.json"
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "fitness_per_generation": concatenated.fitness_per_generation,
-                "structural_diversity_per_generation": concatenated.structural_diversity_per_generation,
-                "fidelity_per_generation": concatenated.fidelity_per_generation,
-                "depth_per_generation": concatenated.depth_per_generation
-            }, f, indent=4)
+            from dataclasses import asdict
+            json.dump(asdict(concatenated), f, indent=4)
 
         print(f"✅ Resultado concatenado salvo em: {output_path.name}")
         return output_path

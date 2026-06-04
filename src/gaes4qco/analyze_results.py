@@ -1,7 +1,10 @@
 import json
-
 import numpy as np
 from pathlib import Path
+import warnings
+
+# Ignora o UserWarning específico do pkg_resources no qiskit_ibm_provider
+warnings.filterwarnings("ignore", category=UserWarning, module="qiskit_ibm_provider.api.session")
 
 from analysis.circuit_error_evaluator import CircuitErrorEvaluator
 from analysis.loader import JsonDataLoader
@@ -18,7 +21,7 @@ from experiment.config import ExperimentConfig
 
 
 PROJECT_PATH = Path(__file__).parents[2]
-
+RESULTS_DIR = PROJECT_PATH / "results"
 
 def main():
     """
@@ -31,7 +34,7 @@ def main():
 
     # === Diretórios ===
     tests_dir = PROJECT_PATH / "tests"
-    concatenated_dir = PROJECT_PATH / "results" / "concatenated"
+    concatenated_dir = RESULTS_DIR / "concatenated"
     plots_dir = concatenated_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
 
@@ -58,8 +61,9 @@ def main():
     # === Loop por TESTES ===
     for config, test_filename in zip(experiment_configs, filenames):
         try:
-            test_config_path = tests_dir / test_filename
-            print(f"\n🧪 Analisando teste: {test_filename}")
+            # O `test_filename` agora é o caminho completo
+            test_config_path = Path(test_filename)
+            print(f"\n🧪 Analisando teste: {test_config_path.name}")
 
             # Caminho do circuito alvo
             target_circuit_path = (PROJECT_PATH / config.filename_target_circuit).with_suffix(".json")
@@ -73,21 +77,29 @@ def main():
             )
 
             # === Localiza resultados concatenados ===
-            result_file = concatenated_dir / f"{test_filename.replace('.json', '_concatenated_result.json')}"
+            result_file = concatenated_dir / f"{test_config_path.stem}_concatenated_result.json"
             if not result_file.exists():
-                print(f"⚠️ Arquivo de resultados não encontrado: {result_file.name}")
+                print(f"⚠️ Arquivo de resultados concatenado não encontrado: {result_file.name}")
                 continue
 
             result_data = json_loader.load(str(result_file))
 
-            # === Determina a última fase do experimento ===
-            if not config.phases or not config.phases[-1].result_filepath:
-                print(f"⚠️ Configuração {test_filename} não contém caminhos de resultados na última fase.")
+            # === Determina a pasta de circuitos da ÚLTIMA FASE ===
+            folder_names = list(config.get_config_foldername())
+            hashes = list(config.get_config_hash())
+            
+            if not folder_names:
+                print(f"⚠️ Não foi possível gerar nomes de pasta para {test_config_path.name}")
                 continue
 
-            # Usa o caminho da última fase para encontrar a pasta de circuitos
-            last_phase_result_path = PROJECT_PATH / config.phases[-1].result_filepath
-            final_circuits_folder = last_phase_result_path.parent / last_phase_result_path.name.replace("_results.json", "_circuits")
+            # Navega pela estrutura de pastas até a última fase
+            current_path = RESULTS_DIR
+            for i in range(len(config.phases)):
+                current_path = current_path / folder_names[i]
+
+            # O hash da última fase identifica o arquivo de configuração e, por derivação, a pasta de circuitos
+            last_phase_hash = hashes[-1]
+            final_circuits_folder = current_path / f"{last_phase_hash}_circuits"
 
             if not final_circuits_folder.exists():
                 print(f"⚠️ Pasta de circuitos finais não encontrada: {final_circuits_folder}")
@@ -115,7 +127,7 @@ def main():
                 best_error = float(np.min(errors_last_gen_sorted))
 
                 experiment_metrics.append({
-                    "name": test_filename.replace(".json", ""),
+                    "name": test_config_path.stem,
                     "config_path": str(test_config_path),
                     "mean_error": mean_error,
                     "best_error": best_error,
@@ -128,7 +140,7 @@ def main():
                 print("⚠️ Nenhum erro calculado para este teste.")
 
             # === Gera gráficos ===
-            plot_name = test_filename.replace(".json", "")
+            plot_name = test_config_path.stem
             config_dict = dataclass_to_primitive(config)
             single_plotter.plot(result_data, str(plots_dir / f"{plot_name}.png"), config_info=config_dict)
             fidelity_plotter.plot(result_data, str(plots_dir / f"{plot_name}_fidelity_depth.png"), config_info=config_dict)
@@ -144,7 +156,7 @@ def main():
             max_depth = max(max_depth, config.max_depth)
 
         except Exception as e:
-            print(f"❌ Falha ao processar teste {test_filename}: {e}")
+            print(f"❌ Falha ao processar teste {test_config_path.name}: {e}")
 
     # === Ranking Top 5% ===
     if experiment_metrics:

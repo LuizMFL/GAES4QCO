@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from qiskit.quantum_info import Statevector
 
@@ -10,9 +11,12 @@ def main():
     Carrega um circuito salvo (alvo ou otimizado) e calcula sua taxa de erro
     em um simulador com ruído.
     """
-    # --- Configuração ---
-    CIRCUIT_TO_TEST_PATH = r"/results_gates_antigas/target_circuits/target_seed_101.json"
-    circuit_optimized_path = r"/results_gates_antigas/pha=0_WG_si_to_ns_AD_RD_ST_FT/39372e26_circuits/rank_000_fit_0.9695_fid_0.9724_depth_10.json"
+    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+    # --- Configuração (usando Path para evitar problemas de OS/diretório de execução) ---
+    CIRCUIT_TO_TEST_PATH = PROJECT_ROOT / "results" / "target_circuits" / "target_seed_101.json"
+    circuit_optimized_path = PROJECT_ROOT / "results" / "pha=0_FD_si_to_to_FX_RD_NR_NL/pha=1_WG_mu_to_ns_FX_BD_ST_NL/be3f1a55_circuits/rank_000_fit_0.7180_fid_0.7180_depth_15.json"
+
     SHOTS = 2**20
     container = AppContainer()
     container.config.from_dict({
