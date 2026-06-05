@@ -13,8 +13,6 @@ def _reset_evaluation_flags(circuit: Circuit):
     """Reseta os flags de um circuito para forçar a reavaliação e recalcular caches."""
     circuit.fitness = None
     circuit.fidelity = None
-    circuit._structural_key = () 
-    circuit._structural_set = None
 
 
 class RandomMutationSelector(IMutationPopulation):
@@ -84,17 +82,21 @@ class BanditMutationSelector(IMutationPopulation):
                 original_fitness, _ = self._fitness_evaluator.evaluate(individual_copy)
                 
                 mutated_circuit = strategy.mutate_individual(individual_copy)
-                _reset_evaluation_flags(mutated_circuit)
-                
-                mutated_fitness, _ = self._fitness_evaluator.evaluate(mutated_circuit)
-                
-                reward = mutated_fitness - original_fitness
 
+                # 4. Avalia o filho agora para alimentar o Bandit
+                mutated_fitness, mutated_fidelity = self._fitness_evaluator.evaluate(mutated_circuit)
+
+                # 5. SALVA o resultado dentro do circuito para que o Optimizer não calcule de novo!
+                mutated_circuit.fitness = mutated_fitness
+                mutated_circuit.fidelity = mutated_fidelity
+
+                # Atualiza a IA
+                reward = mutated_fitness - original_fitness
                 strategy_name = strategy.__class__.__name__
                 self._counts[strategy_name] += 1
                 self._rewards[strategy_name] += reward
                 self._total_applications += 1
-                
+
                 mutated_individuals.append(mutated_circuit)
             else:
                 mutated_individuals.append(circuit)
@@ -197,7 +199,9 @@ class GateParameterMutation(IMutationStrategy):
             step_size = target_gate.steps_sizes[i_param]
             change = random.gauss(0, step_size.sigma)
             target_gate.parameters[i_param] = (target_gate.parameters[i_param] + change) % (2 * math.pi)
-            
+
+            _reset_evaluation_flags(circuit)
+
             mutated_fitness, _ = self._fitness_evaluator.evaluate(circuit)
             
             success = mutated_fitness > original_fitness

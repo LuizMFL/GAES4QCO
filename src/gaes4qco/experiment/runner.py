@@ -74,6 +74,7 @@ class ExperimentRunner:
                 "crossover_rate": self.config.crossover_rate,
                 "mutation_rate": self.config.mutation_rate,
                 "max_depth": self.config.max_depth,
+                "min_depth": self.config.min_depth,
                 "diversity_threshold": self.config.diversity_threshold,
                 "injection_rate": self.config.injection_rate,
                 "stepsize": phase_config.use_stepsize,
@@ -106,13 +107,13 @@ class ExperimentRunner:
         if self.config.resume_from_checkpoint:
             last_phase_result_path = Path(str(config_file_paths[-1]).replace("_config.json", "_results.json"))
             if last_phase_result_path.exists():
-                logging.info(f"Experimento já concluído. Resultado final encontrado em: {last_phase_result_path}. Pulando.")
+                logging.info(f"Experimento já concluído. Pulando execução para: {self.test_filename}")
                 try:
                     with open(last_phase_result_path, 'r') as f:
                         final_data = json.load(f)
                     best_fitness = final_data.get("generations", [{}])[-1].get("best_fitness", 0.0)
                 except (json.JSONDecodeError, IndexError):
-                    best_fitness = 0.0 # Fallback
+                    best_fitness = 0.0
                 return {
                     "seed": self.config.seed,
                     "best_fitness": best_fitness,
@@ -148,7 +149,6 @@ class ExperimentRunner:
 
             self._configure_container_for_phase(phase, results_file_path)
             
-            # Salva a configuração da fase DEPOIS de configurar o container
             logging.info(f"Salvando configuração da fase em: {config_file_path}")
             config_file_path.parent.mkdir(parents=True, exist_ok=True)
             with open(config_file_path, 'w', encoding='utf-8') as f:

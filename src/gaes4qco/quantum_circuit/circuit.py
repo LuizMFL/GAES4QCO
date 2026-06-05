@@ -1,4 +1,4 @@
-from typing import List, Tuple, Set
+from typing import List, Tuple, Set, Optional
 
 from .column import Column
 
@@ -12,8 +12,8 @@ class Circuit:
             self,
             count_qubits: int,
             columns: List[Column],
-            fitness: float = None,
-            fidelity: float = None
+            fitness: Optional[float] = None,
+            fidelity: Optional[float] = None
     ):
         self.count_qubits = count_qubits
         self.columns = columns
@@ -32,19 +32,28 @@ class Circuit:
     def depth(self) -> int:
         return len(self.columns)
 
-    def get_structural_key(self) -> Tuple:
+    def get_structural_key(self, round_decimals: int = 2) -> Tuple:
         """
         Calcula e retorna uma chave única e imutável que representa a estrutura do circuito.
-        Esta operação é computacionalmente intensiva e não deve ser chamada em loops apertados.
+        Mantém a direcionalidade de gates multi-qubits intacta e discretiza parâmetros
+        contínuos para diferenciar variações angulares significativas na distância de Levenshtein.
         """
         col_tuples = []
         for col in self.columns:
-            sorted_gates = sorted(col.get_gates(), key=lambda g: tuple(sorted(g.qubits)))
-            gate_tuples = tuple(
-                (gate.gate_class.__name__, tuple(sorted(gate.qubits)))
-                for gate in sorted_gates
-            )
-            col_tuples.append(gate_tuples)
+            # 1. Ordena os gates da coluna pela sua tupla ORIGINAL de qubits
+            sorted_gates = sorted(col.get_gates(), key=lambda g: tuple(g.qubits))
+
+            # 2. Cria a assinatura do gate preservando a ordem Control/Target e os parâmetros
+            gate_tuples = []
+            for gate in sorted_gates:
+                # Arredonda os parâmetros contínuos para a precisão desejada (discretização)
+                rounded_params = tuple(round(p, round_decimals) for p in gate.parameters) if gate.parameters else ()
+
+                gate_sig = (gate.gate_class.__name__, tuple(gate.qubits), rounded_params)
+                gate_tuples.append(gate_sig)
+
+            col_tuples.append(tuple(gate_tuples))
+
         return tuple(col_tuples)
 
     def to_dict(self) -> dict:
@@ -61,7 +70,9 @@ class Circuit:
     def copy(self) -> "Circuit":
         return Circuit(
             count_qubits=self.count_qubits,
-            columns=[col.copy() for col in self.columns]
+            columns=[col.copy() for col in self.columns],
+            fitness=self.fitness,
+            fidelity=self.fidelity
         )
 
     def get_cx_count(self) -> int:

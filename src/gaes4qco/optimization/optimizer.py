@@ -11,7 +11,8 @@ from .interfaces import IFitnessEvaluator, IProgressObserver, IFitnessShaper
 
 class Optimizer:
     """
-    O motor do Algoritmo Genético, implementando um modelo (μ + λ) com elitismo.
+    O motor do Algoritmo Genético, implementando um modelo (μ + λ) com elitismo
+    e mutação forçada para garantir a diversidade.
     """
 
     def __init__(
@@ -35,7 +36,6 @@ class Optimizer:
         self._fitness_shaper = fitness_shaper
         self._observer = observer
         self._total_evaluations = 0
-        self._fitness_cache: Dict[Tuple, Tuple[float, float]] = {}
 
     def run(
             self,
@@ -45,7 +45,6 @@ class Optimizer:
     ) -> Population:
         phase_start_time = time.time()
         self._total_evaluations = 0
-        self._fitness_cache.clear()
         
         current_population = initial_population
         stopping_reason = "max_generations_reached"
@@ -54,7 +53,6 @@ class Optimizer:
         self._evaluate_population(current_population)
 
         for gen in range(max_generations):
-            # Passa as taxas para o observer
             mutation_rate = getattr(self._mutation, 'mutation_rate', 0)
             crossover_rate = getattr(self._crossover, 'crossover_rate', 0)
             if self._observer:
@@ -66,19 +64,33 @@ class Optimizer:
             self._crossover.crossover_rate = current_rates.crossover_rate
             self._mutation.mutation_rate = current_rates.mutation_rate
             
-            # 2. Geração de Filhos
+            # 2. Seleção de Pais
             parent_population = self._parent_selection.select(current_population)
-            offspring_population = self._crossover.run(parent_population)
-            mutated_offspring = self._mutation.mutate(offspring_population)
             
-            # 3. Avalia apenas os novos filhos
-            self._evaluate_population(mutated_offspring)
-            
-            # 4. Seleção de Sobreviventes: (μ + λ)
-            combined_population = Population(current_population.get_individuals() + mutated_offspring.get_individuals())
+            # 3. Crossover (separa filhos de pais não modificados)
+            offspring_from_crossover, unmodified_parents = self._crossover.run(parent_population)
+
+            # 4. Mutação Forçada (100% de taxa) nos pais não cruzados
+            forced_mutation_rate_backup = self._mutation.mutation_rate
+            self._mutation.mutation_rate = 1.0
+            mutated_clones = self._mutation.mutate(unmodified_parents)
+            self._mutation.mutation_rate = forced_mutation_rate_backup
+
+            # 5. Mutação Normal (taxa da geração) nos filhos do crossover
+            mutated_offspring = self._mutation.mutate(offspring_from_crossover)
+
+            # 6. Avalia apenas os novos indivíduos
+            newly_created = Population(mutated_clones.get_individuals() + mutated_offspring.get_individuals())
+            self._evaluate_population(newly_created)
+
+            combined_population = Population(current_population.get_individuals() + newly_created.get_individuals())
+
+            # 7. Aplica o shaper nos filhos antes da seleção
+            self._fitness_shaper.shape(combined_population)
+
+            # 8. Seleção de Sobreviventes: (μ + λ)
             current_population = self._survivor_selection.select(combined_population)
 
-            # 5. Condição de Parada
             if fidelity_threshold:
                 best_ind = current_population.get_fittest()
                 if best_ind and best_ind.fidelity is not None and best_ind.fidelity >= fidelity_threshold:
@@ -90,7 +102,7 @@ class Optimizer:
         phase_duration = time.time() - phase_start_time
 
         if self._observer:
-            self._observer.update(final_gen_index, current_population, self._mutation.mutation_rate, self._crossover.crossover_rate)
+            self._observer.update(final_gen_index, current_population, mutation_rate, crossover_rate)
             best_circuit = current_population.get_fittest()
             if best_circuit:
                 self._observer.set_summary(
@@ -111,15 +123,8 @@ class Optimizer:
                 continue
 
             evaluated_count += 1
-            key = individual.get_structural_key()
-            if key in self._fitness_cache:
-                individual.fitness, individual.fidelity = self._fitness_cache[key]
-            else:
-                individual.fitness, individual.fidelity = self._fitness_evaluator.evaluate(individual)
-                self._fitness_cache[key] = (individual.fitness, individual.fidelity)
-                self._total_evaluations += 1
+            individual.fitness, individual.fidelity = self._fitness_evaluator.evaluate(individual)
+            self._total_evaluations += 1
         
         if evaluated_count > 0:
             logging.debug(f"Evaluated {evaluated_count} new individuals.")
-        
-        self._fitness_shaper.shape(population)

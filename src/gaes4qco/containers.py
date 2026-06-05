@@ -152,12 +152,9 @@ class AppContainer(containers.DeclarativeContainer):
         survivor_selection=evolutionary_algorithm.survivor_selector,
         crossover=evolutionary_algorithm.crossover_population,
         mutation=evolutionary_algorithm.mutation_selector,
-        population_factory=population_fac,
         rate_adapter=evolutionary_algorithm.rate_adapter,
         fitness_shaper=optimization.shaper,
-        observer=optimization.observer,
-        elitism_size=config.evolution.elitism_size,
-        population_size=config.evolution.population_size
+        observer=optimization.observer
     )
 
     simulation_backend = providers.Factory(AerSimulator, method='statevector', device='GPU')

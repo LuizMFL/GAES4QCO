@@ -21,7 +21,7 @@ class FidelityFitnessEvaluator(IFitnessEvaluator):
         Converte o circuito de domínio para Qiskit usando o adapter
         e então calcula a fidelidade.
         """
-        if circuit.fidelity:
+        if circuit.fidelity is not None:
             return circuit.fidelity, circuit.fidelity
         # ## A conversão é delegada ao adapter, respeitando a Inversão de Dependência
         qiskit_circuit = self._adapter.from_domain(circuit)

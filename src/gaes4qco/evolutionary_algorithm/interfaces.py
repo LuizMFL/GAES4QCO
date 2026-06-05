@@ -18,7 +18,7 @@ class ISelectionStrategy(ABC):
 
 class IPopulationCrossover(ABC):
     @abstractmethod
-    def run(self, population: Population) -> Population:
+    def run(self, population: Population) -> Tuple[Population, Population]:
         pass
 
 

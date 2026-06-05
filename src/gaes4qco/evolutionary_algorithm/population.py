@@ -1,4 +1,5 @@
 import random
+from itertools import combinations
 from typing import List, Iterator
 
 from analysis.distance_metrics import LevenshteinCircuitDistance
@@ -25,25 +26,37 @@ class Population:
     def get_individuals(self) -> List[Circuit]:
         return list(self._individuals)
 
-    def calculate_structural_diversity(self, sample_size: int = 100) -> float:
+    def calculate_structural_diversity(self, max_samples: int = 50) -> float:
         """
         Estima a diversidade estrutural média usando a distância de Levenshtein.
+        Para evitar O(N^2) total, calcula a distância de todos os pares
+        dentro de uma amostra representativa da população.
         """
         num_individuals = len(self._individuals)
         if num_individuals < 2:
             return 0.0
 
+        # 1. Pega uma amostra representativa da população (sem repetição)
+        sample_size = min(max_samples, num_individuals)
+        sampled_individuals = random.sample(self._individuals, sample_size)
+
         total_distance = 0.0
-        effective_sample_size = min(sample_size, num_individuals)
 
-        for _ in range(effective_sample_size):
-            ind1, ind2 = random.sample(self._individuals, 2)
-            total_distance += self._distance_metric.calculate(ind1, ind2)
+        # 2. Gera todos os pares únicos possíveis DENTRO da amostra
+        # Se max_samples = 50, isso gera (50 * 49) / 2 = 1225 pares.
+        # Isso é computacionalmente leve e estatisticamente muito mais preciso.
+        pairs = list(combinations(sampled_individuals, 2))
+        num_pairs = len(pairs)
 
-        if effective_sample_size == 0:
+        if num_pairs == 0:
             return 0.0
 
-        return total_distance / effective_sample_size
+        # 3. Calcula a distância para cada par
+        for ind1, ind2 in pairs:
+            total_distance += self._distance_metric.calculate(ind1, ind2)
+
+        # 4. Retorna a média correta
+        return total_distance / num_pairs
 
     def __len__(self) -> int:
         return len(self._individuals)

@@ -4,26 +4,34 @@ from typing import Tuple, List
 
 import numpy as np
 
-from quantum_circuit.gate import Gate
-from quantum_circuit.gate_factory import GateFactory
-from .interfaces import IPopulationCrossover, ICrossoverStrategy
+from .interfaces import IPopulationCrossover, ICrossoverStrategy, IMutationPopulation
 from .population import Population
 from quantum_circuit.circuit import Circuit, Column
+from quantum_circuit.gate_factory import GateFactory
 
 
 class PopulationCrossover(IPopulationCrossover):
-    def __init__(self, crossover_strategy: ICrossoverStrategy, crossover_rate: float = 0.8):
+    """
+    Responsável por criar a população de filhos (offspring).
+    Aplica crossover ou, se não aplicar, força a mutação para garantir a variação.
+    """
+    def __init__(
+        self,
+        crossover_strategy: ICrossoverStrategy,
+        crossover_rate: float
+    ):
         self.crossover_strategy = crossover_strategy
         self.crossover_rate = crossover_rate
 
-    def run(self, parent_population: Population) -> Population:
+    def run(self, parent_population: Population):
         parents_local = parent_population.get_individuals()
         offspring = []
+        parents_final = []
         indices = random.sample(range(len(parents_local)), len(parents_local))
-        
+
         for i in range(0, len(indices), 2):
             if i + 1 >= len(parents_local):
-                offspring.append(parents_local[indices[i]].copy())
+                parents_final.append(parents_local[indices[i]])
                 continue
                 
             parent1, parent2 = parents_local[indices[i]], parents_local[indices[i + 1]]
@@ -32,9 +40,9 @@ class PopulationCrossover(IPopulationCrossover):
                 child1, child2 = self.crossover_strategy.crossover(parent1, parent2)
                 offspring.extend([child1, child2])
             else:
-                offspring.extend([parent1.copy(), parent2.copy()])
-                
-        return Population(offspring)
+                parents_final.extend([parent1, parent2])
+
+        return Population(offspring), Population(parents_final)
 
 
 class MultiPointCrossover(ICrossoverStrategy):
@@ -142,3 +150,4 @@ class SinglePointCrossover(ICrossoverStrategy):
 
         num_qubits = max(parent_1.count_qubits, parent_2.count_qubits)
         return Circuit(num_qubits, child1_cols), Circuit(num_qubits, child2_cols)
+

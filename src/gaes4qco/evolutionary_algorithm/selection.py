@@ -222,18 +222,16 @@ class NSGA2SurvivorSelection(ISelectionStrategy):
         if not individuals:
             return Population()
 
-        final_pop_size = self.population_size
-        
         fronts = self._nsga2.non_dominated_sort(individuals)
 
         survivors = []
         for front in fronts:
-            if len(survivors) + len(front) <= final_pop_size:
+            if len(survivors) + len(front) <= self.population_size:
                 survivors.extend(front)
             else:
                 self._nsga2.crowding_distance_assignment(front)
                 front.sort(key=lambda x: x.crowding_distance, reverse=True)
-                needed = final_pop_size - len(survivors)
+                needed = self.population_size - len(survivors)
                 survivors.extend(front[:needed])
                 break
         
