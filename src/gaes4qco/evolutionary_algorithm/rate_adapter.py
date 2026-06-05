@@ -15,7 +15,6 @@ class EvolutionRates:
             raise ValueError("Mutation rate must be in [0, 1].")
 
 
-
 class IRateAdapter(ABC):
     """Interface for strategies that adapt evolutionary rates."""
 
@@ -25,7 +24,6 @@ class IRateAdapter(ABC):
         Receives the current diversity and returns updated crossover and mutation rates.
         """
         ...
-
 
 
 class FixedRateAdapter(IRateAdapter):

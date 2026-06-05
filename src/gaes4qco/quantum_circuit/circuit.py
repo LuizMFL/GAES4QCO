@@ -18,6 +18,7 @@ class Circuit:
         self.count_qubits = count_qubits
         self.columns = columns
         self.fitness = fitness
+        self.base_fitness = fitness
         self.fidelity = fidelity
         self.rank: int = -1
         self.crowding_distance: float = 0.0
@@ -32,7 +33,7 @@ class Circuit:
     def depth(self) -> int:
         return len(self.columns)
 
-    def get_structural_key(self, round_decimals: int = 2) -> Tuple:
+    def get_structural_key(self, round_decimals: int = 3) -> Tuple:
         """
         Calcula e retorna uma chave única e imutável que representa a estrutura do circuito.
         Mantém a direcionalidade de gates multi-qubits intacta e discretiza parâmetros

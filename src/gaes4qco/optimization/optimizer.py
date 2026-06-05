@@ -124,6 +124,7 @@ class Optimizer:
 
             evaluated_count += 1
             individual.fitness, individual.fidelity = self._fitness_evaluator.evaluate(individual)
+            individual.base_fitness = individual.fitness
             self._total_evaluations += 1
         
         if evaluated_count > 0:

@@ -28,8 +28,8 @@ class FitnessSharingShaper(IFitnessShaper):
             return
 
         for ind_i in individuals:
-            if ind_i.fitness is None:
-                continue
+            if getattr(ind_i, 'base_fitness', None) is None:
+                ind_i.base_fitness = ind_i.fitness
 
             sample_indices = random.sample(range(n), min(self._sample_size, n))
             
@@ -42,6 +42,8 @@ class FitnessSharingShaper(IFitnessShaper):
                 if d < self._sigma_share:
                     sh = 1 - (d / self._sigma_share) ** self._alpha
                     niche_count += sh
-            
+
             if niche_count > 1:
-                ind_i.fitness /= niche_count
+                ind_i.fitness = ind_i.base_fitness / niche_count
+            else:
+                ind_i.fitness = ind_i.base_fitness

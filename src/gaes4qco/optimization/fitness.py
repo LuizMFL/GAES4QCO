@@ -1,4 +1,5 @@
-from typing import Tuple
+import logging
+from typing import Tuple, Dict
 
 from qiskit.quantum_info import Statevector, state_fidelity
 from .interfaces import IFitnessEvaluator
@@ -8,50 +9,83 @@ from quantum_circuit.interfaces import IQuantumCircuitAdapter
 
 class FidelityFitnessEvaluator(IFitnessEvaluator):
     """
-    ## Calcula o fitness com base na fidelidade do estado quântico.
-    ## Esta classe substitui a antiga função 'fidelityFitnessFunction'.
+    Calcula o fitness com base na fidelidade do estado quântico,
+    utilizando um Cache Global Estrutural para evitar reavaliações no Qiskit.
     """
 
-    def __init__(self, target_statevector: Statevector, circuit_adapter: IQuantumCircuitAdapter):
+    def __init__(self, target_statevector: Statevector, circuit_adapter: IQuantumCircuitAdapter,
+                 max_cache_size: int = 100000):
         self._target_sv = target_statevector
         self._adapter = circuit_adapter
 
-    def evaluate(self, circuit: Circuit) -> Tuple[float, float]:
-        """
-        Converte o circuito de domínio para Qiskit usando o adapter
-        e então calcula a fidelidade.
-        """
-        if circuit.fidelity is not None:
-            return circuit.fidelity, circuit.fidelity
-        # ## A conversão é delegada ao adapter, respeitando a Inversão de Dependência
-        qiskit_circuit = self._adapter.from_domain(circuit)
+        # O Cache: Mapeia Chave Estrutural -> Fidelidade
+        self._cache: Dict[Tuple, float] = {}
+        self._max_cache_size = max_cache_size
+        self.cache_hits = 0
 
-        # ## O cálculo de fidelidade do Qiskit é realizado aqui
-        solution_sv = Statevector.from_instruction(qiskit_circuit)
-        fidelity = state_fidelity(solution_sv, self._target_sv)
+    def evaluate(self, circuit: Circuit) -> Tuple[float, float]:
+        # 1. Se o próprio objeto já tem a nota, retorna imediato (Ex: sobreviveu da geração passada)
+        if circuit.base_fitness is not None and circuit.fidelity is not None:
+            return circuit.base_fitness, circuit.fidelity
+
+        # 2. Gera a chave estrutural (discretiza ângulos contínuos)
+        circuit_key = circuit.get_structural_key()
+
+        if circuit_key in self._cache:
+            self.cache_hits += 1
+            fidelity = self._cache[circuit_key]
+        else:
+            # 4. Caso Inédito: Chama o gargalo (Qiskit)
+            qiskit_circuit = self._adapter.from_domain(circuit)
+            solution_sv = Statevector.from_instruction(qiskit_circuit)
+            fidelity = state_fidelity(solution_sv, self._target_sv)
+
+            if len(self._cache) >= self._max_cache_size:
+                logging.warning("Cache de avaliação atingiu o limite. Esvaziando para proteger memória.")
+                self._cache.clear()
+
+            self._cache[circuit_key] = fidelity
+
         return max(0.0, fidelity), fidelity
 
 
 class WeightedFidelityFitnessEvaluator(IFitnessEvaluator):
     """
-    Calcula o fitness combinando a fidelidade com uma penalidade baseada na profundidade.
-    A penalidade aumenta drasticamente quando a fidelidade se aproxima de 1.0.
+    Calcula o fitness com penalidade de profundidade,
+    aproveitando o Cache Global Estrutural para a Fidelidade.
     """
 
-    def __init__(self, target_statevector: Statevector, circuit_adapter: IQuantumCircuitAdapter, target_depth: int):
+    def __init__(self, target_statevector: Statevector, circuit_adapter: IQuantumCircuitAdapter, target_depth: int,
+                 max_cache_size: int = 100000):
         self._target_sv = target_statevector
         self._adapter = circuit_adapter
-        self._target_depth = target_depth  # Profundidade do circuito alvo para normalização
+        self._target_depth = target_depth
+
+        # O Cache
+        self._cache: Dict[Tuple, float] = {}
+        self._max_cache_size = max_cache_size
+        self.cache_hits = 0
 
     def evaluate(self, circuit: Circuit) -> Tuple[float, float]:
-        if circuit.fidelity:
+        if circuit.fidelity is not None:
             fidelity = circuit.fidelity
         else:
-            # 1. Calcula a fidelidade pura
-            qiskit_circuit = self._adapter.from_domain(circuit)
-            solution_sv = Statevector.from_instruction(qiskit_circuit)
-            fidelity = state_fidelity(solution_sv, self._target_sv)
-        # 3. Calcula a penalidade de profundidade
+            circuit_key = circuit.get_structural_key(round_decimals=2)
+            if circuit_key in self._cache:
+                self.cache_hits += 1
+                fidelity = self._cache[circuit_key]
+            else:
+                qiskit_circuit = self._adapter.from_domain(circuit)
+                solution_sv = Statevector.from_instruction(qiskit_circuit)
+                fidelity = state_fidelity(solution_sv, self._target_sv)
+
+                # Controle de memória
+                if len(self._cache) >= self._max_cache_size:
+                    logging.warning("Cache de avaliação atingiu o limite. Esvaziando para proteger memória.")
+                    self._cache.clear()
+
+                self._cache[circuit_key] = fidelity
+
         depth_ratio = circuit.depth / self._target_depth if self._target_depth > 0 else circuit.depth
 
         # A penalidade é ponderada pela fidelidade.
