@@ -13,27 +13,30 @@ class Circuit:
             count_qubits: int,
             columns: List[Column],
             fitness: Optional[float] = None,
+            base_fitness: Optional[float] = None,
             fidelity: Optional[float] = None
     ):
         self.count_qubits = count_qubits
         self.columns = columns
         self.fitness = fitness
         self.base_fitness = fitness
+        self.base_fitness = base_fitness
         self.fidelity = fidelity
         self.rank: int = -1
         self.crowding_distance: float = 0.0
 
     @property
     def objectives(self) -> Tuple[float, ...]:
-        if self.fidelity is None:
+        if self.base_fitness is None:
             return -float('inf'), -float('inf')
-        return self.fidelity, -float(self.depth)
+
+        return self.base_fitness, -float(self.depth)
 
     @property
     def depth(self) -> int:
         return len(self.columns)
 
-    def get_structural_key(self, round_decimals: int = 3) -> Tuple:
+    def get_structural_key(self, round_decimals: int = 5) -> Tuple:
         """
         Calcula e retorna uma chave única e imutável que representa a estrutura do circuito.
         Mantém a direcionalidade de gates multi-qubits intacta e discretiza parâmetros
@@ -62,6 +65,7 @@ class Circuit:
             "count_qubits": self.count_qubits,
             "depth": self.depth,
             "fitness": self.fitness,
+            "base_fitness": self.base_fitness,
             "fidelity": self.fidelity,
             "nsga2_rank": self.rank,
             "nsga2_crowding_distance": self.crowding_distance,
@@ -73,6 +77,7 @@ class Circuit:
             count_qubits=self.count_qubits,
             columns=[col.copy() for col in self.columns],
             fitness=self.fitness,
+            base_fitness=self.base_fitness,
             fidelity=self.fidelity
         )
 

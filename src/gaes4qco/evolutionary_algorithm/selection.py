@@ -51,7 +51,7 @@ class TournamentSurvivorSelection(ISelectionStrategy):
         if not individuals:
             return Population()
 
-        individuals.sort(key=lambda ind: ind.fitness, reverse=True)
+        individuals.sort(key=lambda ind: ind.base_fitness, reverse=True)
         elites = individuals[:self.elitism_count]
         competitors = individuals[self.elitism_count:]
         survivors = elites[:]
@@ -86,10 +86,10 @@ class RandomSurvivorSelection(ISelectionStrategy):
         if not individuals:
             return Population()
 
-        individuals.sort(key=lambda ind: ind.fitness, reverse=True)
+        individuals.sort(key=lambda ind: ind.base_fitness, reverse=True)
         elites = individuals[:self.elitism_count]
-        
-        competitors = [ind for ind in individuals if ind not in elites]
+        competitors = individuals[self.elitism_count:]
+
         num_to_select_randomly = self.population_size - len(elites)
         
         if num_to_select_randomly <= 0:
@@ -127,10 +127,10 @@ class RouletteSurvivorSelection(ISelectionStrategy):
         if not individuals:
             return Population()
 
-        individuals.sort(key=lambda ind: ind.fitness, reverse=True)
+        individuals.sort(key=lambda ind: ind.base_fitness, reverse=True)
         elites = individuals[:self.elitism_count]
-        
-        competitors = [ind for ind in individuals if ind not in elites]
+        competitors = individuals[self.elitism_count:]
+
         num_to_select_roulette = self.population_size - len(elites)
         if num_to_select_roulette <= 0:
             return Population(elites)
@@ -213,18 +213,22 @@ class NSGA2Service(IMultiObjectiveService):
 
 
 class NSGA2SurvivorSelection(ISelectionStrategy):
-    def __init__(self, population_size: int, nsga2_service: IMultiObjectiveService, elitism_count: int = 0):
+    def __init__(self, population_size: int, nsga2_service: IMultiObjectiveService, elitism_count: int):
         self.population_size = population_size
         self._nsga2 = nsga2_service
+        self.elitism_count = elitism_count
 
     def select(self, population: Population, num_to_select: Optional[int] = None) -> Population:
         individuals = _get_evaluated_individuals(population)
         if not individuals:
             return Population()
 
-        fronts = self._nsga2.non_dominated_sort(individuals)
+        individuals.sort(key=lambda ind: ind.base_fitness, reverse=True)
+        survivors = individuals[:self.elitism_count]
+        competitors = individuals[self.elitism_count:]
 
-        survivors = []
+        fronts = self._nsga2.non_dominated_sort(competitors)
+
         for front in fronts:
             if len(survivors) + len(front) <= self.population_size:
                 survivors.extend(front)

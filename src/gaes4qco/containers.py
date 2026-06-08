@@ -7,7 +7,13 @@ from experiment import checkpoint, runner
 from quantum_circuit import qiskit_adapter, circuit_factory, gate_factory, executor as quantum_executor
 from evolutionary_algorithm import selection, crossover, mutation, population_factory, rate_adapter
 from optimization import fitness, observer, optimizer, fitness_shaper
-from analysis import error_analyzer, wrappers
+from analysis import error_analyzer, wrappers, distance_metrics, profiler
+
+
+class AnalysisContainer(containers.DeclarativeContainer):
+    """Container para componentes de análise como métricas de distância."""
+    _distance_metric = providers.Factory(distance_metrics.LevenshteinCircuitDistance)
+    distance_metric = providers.Factory(wrappers.DistanceMetricProfilerWrapper, decorated=_distance_metric)
 
 
 class QuantumCircuitContainer(containers.DeclarativeContainer):
@@ -20,6 +26,7 @@ class QuantumCircuitContainer(containers.DeclarativeContainer):
 class OptimizationContainer(containers.DeclarativeContainer):
     config = providers.Configuration()
     gateways = providers.DependenciesContainer()
+    analysis = providers.DependenciesContainer()
 
     target_statevector = providers.Singleton(Statevector, data=config.quantum.target_statevector_data)
 
@@ -30,6 +37,12 @@ class OptimizationContainer(containers.DeclarativeContainer):
             target_statevector=target_statevector,
             circuit_adapter=gateways.qiskit_adapter,
             target_depth=config.quantum.target_depth
+        ),
+        cnot_penalty=providers.Factory(
+            fitness.CNOTPenaltyFitnessEvaluator,
+            target_statevector=target_statevector,
+            circuit_adapter=gateways.qiskit_adapter,
+            max_allowed_cx=14
         ),
         default=providers.Factory(
             fitness.FidelityFitnessEvaluator,
@@ -44,7 +57,9 @@ class OptimizationContainer(containers.DeclarativeContainer):
         sharing=providers.Factory(
             fitness_shaper.FitnessSharingShaper,
             sharing_radius=config.niching.sharing_radius,
-            alpha=config.niching.alpha
+            alpha=config.niching.alpha,
+            distance_metric=analysis.distance_metric,
+            sample_size=50
         ),
         default=providers.Factory(fitness_shaper.NullFitnessShaper)
     )
@@ -61,6 +76,7 @@ class EvolutionaryAlgorithmContainer(containers.DeclarativeContainer):
     config = providers.Configuration()
     factories = providers.DependenciesContainer()
     optimization = providers.DependenciesContainer()
+    analysis = providers.DependenciesContainer()
     nsga2_service = providers.Factory(selection.NSGA2Service)
 
     _parent_selector = providers.Selector(
@@ -91,13 +107,18 @@ class EvolutionaryAlgorithmContainer(containers.DeclarativeContainer):
         providers.Factory(mutation.SwapColumnsMutation),
         providers.Factory(mutation.SingleGateFlipMutation, gate_factory=factories.gate_factory, use_evolutionary_strategy=config.evolution.stepsize),
         providers.Factory(
-            mutation.ChangeDepthMutation, 
+            mutation.ChangeDepthMutation,
             min_depth=config.evolution.min_depth,
-            max_depth=config.evolution.max_depth, 
-            gate_factory=factories.gate_factory, 
+            max_depth=config.evolution.max_depth,
+            gate_factory=factories.gate_factory,
             use_evolutionary_strategy=config.evolution.stepsize
         ),
-        providers.Factory(mutation.GateParameterMutation, fitness_evaluator=optimization.evaluator, c_factor=config.evolution.c_factor),
+        providers.Factory(
+            mutation.GateParameterMutation,
+            fitness_evaluator=optimization.evaluator,
+            c_factor=config.evolution.c_factor,
+            use_evolutionary_strategy=config.evolution.stepsize
+        ),
         providers.Factory(mutation.SwapControlTargetMutation)
     )
     
@@ -106,6 +127,7 @@ class EvolutionaryAlgorithmContainer(containers.DeclarativeContainer):
         bandit=providers.Factory(mutation.BanditMutationSelector, mutation_strategies=_mutation_pool, mutation_rate=config.evolution.mutation_rate, fitness_evaluator=optimization.evaluator),
         default=providers.Factory(mutation.RandomMutationSelector, mutation_strategies=_mutation_pool, mutation_rate=config.evolution.mutation_rate),
     )
+    mutation_wrapper = providers.Factory(wrappers.MutationProfilerWrapper, decorated=mutation_selector)
     
     _crossover_population = providers.Factory(
         crossover.PopulationCrossover,
@@ -114,7 +136,7 @@ class EvolutionaryAlgorithmContainer(containers.DeclarativeContainer):
     )
     crossover_population = providers.Factory(wrappers.CrossoverProfilerWrapper, decorated=_crossover_population)
 
-    rate_adapter = providers.Selector(
+    _rate_adapter = providers.Selector(
         config.selection_strategy.rate_adapter,
         adaptive=providers.Factory(
             rate_adapter.DiversityAdaptiveRateAdapter,
@@ -129,15 +151,24 @@ class EvolutionaryAlgorithmContainer(containers.DeclarativeContainer):
             mutation_rate=config.evolution.mutation_rate
         )
     )
+    rate_adapter = providers.Factory(wrappers.RateAdapterProfilerWrapper, decorated=_rate_adapter)
 
 
 class AppContainer(containers.DeclarativeContainer):
+    wiring_config = containers.WiringConfiguration(modules=["evolutionary_algorithm.population"])
+
     config = providers.Configuration()
-    circuit = providers.Container(QuantumCircuitContainer, config=config)
-    optimization = providers.Container(OptimizationContainer, config=config, gateways=circuit)
-    evolutionary_algorithm = providers.Container(EvolutionaryAlgorithmContainer, config=config, factories=circuit, optimization=optimization)
     
-    population_fac = providers.Factory(population_factory.PopulationFactory, circuit_factory=circuit.circuit_factory)
+    analysis = providers.Container(AnalysisContainer)
+    circuit = providers.Container(QuantumCircuitContainer, config=config)
+    optimization = providers.Container(OptimizationContainer, config=config, gateways=circuit, analysis=analysis)
+
+    evolutionary_algorithm = providers.Container(EvolutionaryAlgorithmContainer, config=config, factories=circuit, optimization=optimization, analysis=analysis)
+    
+    population_fac = providers.Factory(
+        population_factory.PopulationFactory, 
+        circuit_factory=circuit.circuit_factory
+    )
     
     checkpoint_manager = providers.Factory(
         checkpoint.CheckpointManager,
@@ -151,16 +182,32 @@ class AppContainer(containers.DeclarativeContainer):
         parent_selection=evolutionary_algorithm.parent_selector,
         survivor_selection=evolutionary_algorithm.survivor_selector,
         crossover=evolutionary_algorithm.crossover_population,
-        mutation=evolutionary_algorithm.mutation_selector,
+        mutation=evolutionary_algorithm.mutation_wrapper,
         rate_adapter=evolutionary_algorithm.rate_adapter,
         fitness_shaper=optimization.shaper,
         observer=optimization.observer
     )
 
-    simulation_backend = providers.Factory(AerSimulator, method='statevector', device='GPU')
-    
-    quantum_executor = providers.Factory(quantum_executor.QiskitExecutor, adapter=circuit.qiskit_adapter, backend=simulation_backend)
-    
+    # 1. Cria um modelo de hardware genérico (mas realista) com a quantidade de qubits necessária
+    generic_backend = providers.Factory(
+        GenericBackendV2,
+        num_qubits=config.quantum.num_qubits  # Usa os qubits da config
+    )
+
+    # 2. Envelopa o backend genérico em um AerSimulator para herdar as propriedades físicas (NoiseModel, T1, T2, etc)
+    simulation_backend = providers.Factory(
+        AerSimulator.from_backend,
+        backend=generic_backend,
+        method='density_matrix',  # Recomendado para simulação de ruído (ou 'automatic')
+        device='GPU'
+    )
+
+    quantum_executor = providers.Factory(
+        quantum_executor.QiskitExecutor,
+        adapter=circuit.qiskit_adapter,
+        backend=simulation_backend
+    )
+
     error_analyzer = providers.Factory(error_analyzer.ErrorAnalyzer, executor=quantum_executor)
 
 

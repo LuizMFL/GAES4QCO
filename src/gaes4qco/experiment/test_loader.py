@@ -7,7 +7,7 @@ import numpy as np
 from qiskit.quantum_info import Statevector
 
 from containers import QuantumCircuitContainer
-from experiment.config import ExperimentConfig, PhaseConfig
+from experiment.config import ExperimentConfig, PhaseConfig, FitnessEvaluatorType
 from evolutionary_algorithm.selection import SelectionType
 from quantum_circuit.circuit import Circuit
 from quantum_circuit.interfaces import IQuantumCircuitAdapter
@@ -95,7 +95,7 @@ class TestConfigLoader:
         """Constructs a PhaseConfig from its dict representation."""
         return PhaseConfig(
             use_stepsize=phase_dict["use_stepsize"],
-            use_weighted_fitness=phase_dict["use_weighted_fitness"],
+            fitness_evaluator=FitnessEvaluatorType[phase_dict["fitness_evaluator"].upper()],
             use_adaptive_rates=phase_dict["use_adaptive_rates"],
             use_bandit_mutation=phase_dict["use_bandit_mutation"],
             parent_selection=SelectionType[phase_dict["parent_selection"].upper()],

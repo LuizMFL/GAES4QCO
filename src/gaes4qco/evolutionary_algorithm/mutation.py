@@ -2,6 +2,7 @@ import random
 import math
 from typing import List, Optional
 
+from shared.value_objects import StepSize
 from .interfaces import IMutationStrategy, IMutationPopulation
 from .population import Population
 from quantum_circuit.circuit import Circuit, Column
@@ -17,7 +18,11 @@ def _reset_evaluation_flags(circuit: Circuit):
 
 
 class RandomMutationSelector(IMutationPopulation):
-    def __init__(self, mutation_strategies: List[IMutationStrategy], mutation_rate: float = 0.1):
+    def __init__(
+            self,
+            mutation_strategies: List[IMutationStrategy],
+            mutation_rate: float
+    ):
         self._strategies = mutation_strategies
         self.mutation_rate = mutation_rate
 
@@ -148,7 +153,8 @@ class ChangeDepthMutation(IMutationStrategy):
     def mutate_individual(self, circuit: Circuit) -> Circuit:
         random_gauss = random.gauss(0, 1)
         change = math.ceil(random_gauss) if random.random() < 0.5 else math.floor(random_gauss)
-        if change == 0: change = random.choice([-1, 1])
+        if change == 0:
+            change = random.choice([-1, 1])
 
         new_depth = circuit.depth + change
         new_depth = max(self.min_depth, min(new_depth, self.max_depth))
@@ -176,9 +182,10 @@ class ChangeDepthMutation(IMutationStrategy):
 
 
 class GateParameterMutation(IMutationStrategy):
-    def __init__(self, fitness_evaluator: IFitnessEvaluator, c_factor: Optional[float] = None):
+    def __init__(self, fitness_evaluator: IFitnessEvaluator, c_factor: Optional[float], use_evolutionary_strategy: bool):
         self._fitness_evaluator = fitness_evaluator
         self._c_factor = c_factor
+        self.use_evolutionary_strategy = use_evolutionary_strategy
 
     def can_apply(self, circuit: Circuit) -> bool:
         return any(gate.parameters for col in circuit.columns for gate in col.get_gates())
@@ -190,11 +197,16 @@ class GateParameterMutation(IMutationStrategy):
             for i_gate, gate in enumerate(col.get_gates())
             for i_param in range(len(gate.parameters))
         ]
-        if not mutable_params: return circuit
+        if not mutable_params:
+            return circuit
 
         i_col, i_gate, i_param = random.choice(mutable_params)
         target_gate = circuit.columns[i_col].gates[i_gate]
-        
+
+        if self.use_evolutionary_strategy:
+            if not target_gate.steps_sizes or len(target_gate.steps_sizes) != len(target_gate.parameters):
+                target_gate.steps_sizes = [StepSize() for _ in target_gate.parameters]
+
         if target_gate.steps_sizes and i_param < len(target_gate.steps_sizes):
             circuit.fitness, circuit.fidelity = self._fitness_evaluator.evaluate(circuit)
             circuit.base_fitness = circuit.fitness
@@ -234,8 +246,10 @@ class SwapControlTargetMutation(IMutationStrategy):
     @staticmethod
     def _get_num_controls(gate_class):
         name = gate_class.__name__
-        if name in {"CXGate", "CZGate", "CYGate", "DCXGate", "ECRGate", "CHGate", "CU1Gate", "CU3Gate"}: return 1
-        if name == "RCCXGate": return 2
+        if name in {"CXGate", "CZGate", "CYGate", "DCXGate", "ECRGate", "CHGate", "CU1Gate", "CU3Gate"}:
+            return 1
+        if name == "RCCXGate":
+            return 2
         return 0
 
     def can_apply(self, circuit: Circuit) -> bool:
@@ -248,7 +262,8 @@ class SwapControlTargetMutation(IMutationStrategy):
             for i_gate, gate in enumerate(col.get_gates())
             if self._get_num_controls(gate.gate_class) > 0
         ]
-        if not mutable_gates: return circuit
+        if not mutable_gates:
+            return circuit
 
         i_col, i_gate, num_controls = random.choice(mutable_gates)
         target_gate = circuit.columns[i_col].gates[i_gate]
@@ -256,7 +271,8 @@ class SwapControlTargetMutation(IMutationStrategy):
         control_qubits = target_gate.qubits[:num_controls]
         target_qubits = target_gate.qubits[num_controls:]
         
-        if not control_qubits or not target_qubits: return circuit
+        if not control_qubits or not target_qubits:
+            return circuit
 
         control_to_swap = random.choice(control_qubits)
         target_to_swap = random.choice(target_qubits)

@@ -13,38 +13,16 @@ class FidelityFitnessEvaluator(IFitnessEvaluator):
     utilizando um Cache Global Estrutural para evitar reavaliações no Qiskit.
     """
 
-    def __init__(self, target_statevector: Statevector, circuit_adapter: IQuantumCircuitAdapter,
-                 max_cache_size: int = 100000):
+    def __init__(self, target_statevector: Statevector, circuit_adapter: IQuantumCircuitAdapter):
         self._target_sv = target_statevector
         self._adapter = circuit_adapter
 
-        # O Cache: Mapeia Chave Estrutural -> Fidelidade
-        self._cache: Dict[Tuple, float] = {}
-        self._max_cache_size = max_cache_size
-        self.cache_hits = 0
-
     def evaluate(self, circuit: Circuit) -> Tuple[float, float]:
-        # 1. Se o próprio objeto já tem a nota, retorna imediato (Ex: sobreviveu da geração passada)
         if circuit.base_fitness is not None and circuit.fidelity is not None:
             return circuit.base_fitness, circuit.fidelity
-
-        # 2. Gera a chave estrutural (discretiza ângulos contínuos)
-        circuit_key = circuit.get_structural_key()
-
-        if circuit_key in self._cache:
-            self.cache_hits += 1
-            fidelity = self._cache[circuit_key]
-        else:
-            # 4. Caso Inédito: Chama o gargalo (Qiskit)
-            qiskit_circuit = self._adapter.from_domain(circuit)
-            solution_sv = Statevector.from_instruction(qiskit_circuit)
-            fidelity = state_fidelity(solution_sv, self._target_sv)
-
-            if len(self._cache) >= self._max_cache_size:
-                logging.warning("Cache de avaliação atingiu o limite. Esvaziando para proteger memória.")
-                self._cache.clear()
-
-            self._cache[circuit_key] = fidelity
+        qiskit_circuit = self._adapter.from_domain(circuit)
+        solution_sv = Statevector.from_instruction(qiskit_circuit)
+        fidelity = state_fidelity(solution_sv, self._target_sv)
 
         return max(0.0, fidelity), fidelity
 
@@ -55,36 +33,19 @@ class WeightedFidelityFitnessEvaluator(IFitnessEvaluator):
     aproveitando o Cache Global Estrutural para a Fidelidade.
     """
 
-    def __init__(self, target_statevector: Statevector, circuit_adapter: IQuantumCircuitAdapter, target_depth: int,
-                 max_cache_size: int = 100000):
+    def __init__(self, target_statevector: Statevector, circuit_adapter: IQuantumCircuitAdapter, target_depth: int):
         self._target_sv = target_statevector
         self._adapter = circuit_adapter
         self._target_depth = target_depth
-
-        # O Cache
-        self._cache: Dict[Tuple, float] = {}
-        self._max_cache_size = max_cache_size
-        self.cache_hits = 0
 
     def evaluate(self, circuit: Circuit) -> Tuple[float, float]:
         if circuit.fidelity is not None:
             fidelity = circuit.fidelity
         else:
-            circuit_key = circuit.get_structural_key(round_decimals=2)
-            if circuit_key in self._cache:
-                self.cache_hits += 1
-                fidelity = self._cache[circuit_key]
-            else:
-                qiskit_circuit = self._adapter.from_domain(circuit)
-                solution_sv = Statevector.from_instruction(qiskit_circuit)
-                fidelity = state_fidelity(solution_sv, self._target_sv)
 
-                # Controle de memória
-                if len(self._cache) >= self._max_cache_size:
-                    logging.warning("Cache de avaliação atingiu o limite. Esvaziando para proteger memória.")
-                    self._cache.clear()
-
-                self._cache[circuit_key] = fidelity
+            qiskit_circuit = self._adapter.from_domain(circuit)
+            solution_sv = Statevector.from_instruction(qiskit_circuit)
+            fidelity = state_fidelity(solution_sv, self._target_sv)
 
         depth_ratio = circuit.depth / self._target_depth if self._target_depth > 0 else circuit.depth
 
@@ -99,4 +60,41 @@ class WeightedFidelityFitnessEvaluator(IFitnessEvaluator):
 
         # 4. O fitness final é a fidelidade ponderada pela penalidade de profundidade
         final_fitness = fidelity * depth_penalty
+        return max(0.0, final_fitness), fidelity
+
+
+class CNOTPenaltyFitnessEvaluator(IFitnessEvaluator):
+    """
+    Calcula o fitness com penalidade focada no hardware físico (NISQ).
+    Em vez de punir a profundidade total, pune a quantidade de portas de 2-qubits (CXGates),
+    pois são elas que dominam o erro físico e forçam o roteamento de SWAPs.
+    """
+
+    def __init__(self, target_statevector: Statevector, circuit_adapter: IQuantumCircuitAdapter, max_allowed_cx: int):
+        self._target_sv = target_statevector
+        self._adapter = circuit_adapter
+        self._max_cx = max_allowed_cx  # Referência de CNOTs máximos aceitáveis
+
+    def evaluate(self, circuit: Circuit) -> Tuple[float, float]:
+        # 1. Base Fidelity (Rápido e determinístico)
+        if circuit.fidelity is not None:
+            fidelity = circuit.fidelity
+        else:
+            qiskit_circuit = self._adapter.from_domain(circuit)
+            solution_sv = Statevector.from_instruction(qiskit_circuit)
+            fidelity = state_fidelity(solution_sv, self._target_sv)
+
+        # 2. Conta os CNOTs em vez da profundidade
+        cx_count = circuit.get_cx_count()
+        cx_ratio = cx_count / self._max_cx if self._max_cx > 0 else cx_count
+
+        # 3. Penalidade Dinâmica
+        # Só pune o circuito quando ele começa a ficar matematicamente bom (> 0.90)
+        penalty_factor = fidelity ** 100
+
+        # Exemplo: Se o circuito estourar o limite de CX, perde 15% do fitness
+        cx_penalty = 1.0 - (0.15 * cx_ratio * penalty_factor)
+        cx_penalty = max(0.0, cx_penalty)
+
+        final_fitness = fidelity * cx_penalty
         return max(0.0, final_fitness), fidelity

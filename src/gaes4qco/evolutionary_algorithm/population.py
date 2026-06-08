@@ -1,8 +1,10 @@
 import random
 from itertools import combinations
-from typing import List, Iterator
+from typing import List, Iterator, Optional
 
-from analysis.distance_metrics import LevenshteinCircuitDistance
+from dependency_injector.wiring import Provide, inject
+
+from analysis.interfaces import IDistanceMetric
 from quantum_circuit.circuit import Circuit
 
 
@@ -10,14 +12,19 @@ class Population:
     """
     Encapsula uma coleção de indivíduos (Circuitos).
     """
-    def __init__(self, individuals: List[Circuit] = None):
+
+    @inject
+    def __init__(
+        self, individuals: Optional[List[Circuit]] = None,
+        distance_metric: IDistanceMetric = Provide["analysis.distance_metric"]
+    ):
         self._individuals = individuals if individuals is not None else []
-        self._distance_metric = LevenshteinCircuitDistance()
+        self._distance_metric = distance_metric
 
     def add_individual(self, individual: Circuit):
         self._individuals.append(individual)
 
-    def get_fittest(self) -> Circuit:
+    def get_fittest(self) -> Optional[Circuit]:
         evaluated_individuals = [ind for ind in self._individuals if ind.fitness is not None]
         if not evaluated_individuals:
             return None
@@ -28,9 +35,7 @@ class Population:
 
     def calculate_structural_diversity(self, max_samples: int = 50) -> float:
         """
-        Estima a diversidade estrutural média usando a distância de Levenshtein.
-        Para evitar O(N^2) total, calcula a distância de todos os pares
-        dentro de uma amostra representativa da população.
+        Estima a diversidade estrutural média usando a métrica de distância injetada.
         """
         num_individuals = len(self._individuals)
         if num_individuals < 2:

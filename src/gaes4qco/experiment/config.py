@@ -1,5 +1,6 @@
 import enum
-from dataclasses import dataclass, field, asdict, is_dataclass
+from dataclasses import dataclass, asdict, is_dataclass
+from enum import Enum
 from typing import List, Any, Optional, Generator
 from pathlib import Path
 import json
@@ -11,11 +12,17 @@ from shared.value_objects import CrossoverType
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
+class FitnessEvaluatorType(Enum):
+    DEFAULT = "default"
+    WEIGHTED = "weighted"
+    CNOT_PENALTY = "cnot_penalty"
+
+
 @dataclass
 class PhaseConfig:
     """Configuração para uma única fase da otimização."""
     use_stepsize: bool
-    use_weighted_fitness: bool
+    fitness_evaluator: FitnessEvaluatorType
     use_adaptive_rates: bool
     use_bandit_mutation: bool
     parent_selection: SelectionType
@@ -45,8 +52,6 @@ class ExperimentConfig:
     num_qubits: int = 4
     elitism_size: int = 10
     population_size: int = 200
-    diversity_threshold: float = 0.1
-    injection_rate: float = 0.15
     
     tournament_size: Optional[int] = None
     crossover_rate: Optional[float] = None
@@ -87,7 +92,12 @@ class ExperimentConfig:
 
     def get_config_foldername(self) -> Generator[str, Any, None]:
         for i, phase in enumerate(self.phases):
-            fit_flag = "WG" if phase.use_weighted_fitness else "FD"
+            if phase.fitness_evaluator == FitnessEvaluatorType.WEIGHTED:
+                fit_flag = "WG"
+            elif phase.fitness_evaluator == FitnessEvaluatorType.CNOT_PENALTY:
+                fit_flag = "CP"
+            else:
+                fit_flag = "FD"  # Default (Fidelity)
             rate_flag = "AD" if phase.use_adaptive_rates else "FX"
             mut_flag = "BD" if phase.use_bandit_mutation else "RD"
             step_flag = "ST" if phase.use_stepsize else "NR"

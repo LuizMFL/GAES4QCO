@@ -59,5 +59,6 @@ class CircuitFactory(ICircuitFactory):
             count_qubits=data.get("count_qubits"),
             columns=columns,
             fitness=data.get("fitness"),
+            base_fitness=data.get("base_fitness"),
             fidelity=data.get("fidelity")
         )

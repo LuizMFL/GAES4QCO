@@ -1,6 +1,7 @@
 from dependency_injector import providers
 from analysis.profiler import profile_time
 
+
 class ProfilingDecoratorProvider(providers.Provider):
     """
     Um Provider customizado que instancia outro provider e depois aplica

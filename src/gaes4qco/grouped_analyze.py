@@ -19,6 +19,7 @@ IGNORED_FIELDS_FOR_GROUPING = {
     "config_file_path", "phases", "target_statevector_data", "resume_from_checkpoint"
 }
 
+
 def get_group_signature(config: ExperimentConfig) -> str:
     """
     Cria uma assinatura única para uma configuração de experimento, ignorando as sementes e dados de execução.

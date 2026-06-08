@@ -8,6 +8,7 @@ from containers import ExperimentContainer
 from .config import ExperimentConfig
 from analysis.profiler import profiler
 
+
 def run_experiment_task(config_dict: dict, filepath: str) -> dict:
     """
     Função alvo para cada processo. Cria um ambiente totalmente isolado para executar o experimento.
@@ -29,6 +30,7 @@ def run_experiment_task(config_dict: dict, filepath: str) -> dict:
     profiler.report()
     
     return result
+
 
 class ParallelExperimentManager:
     """

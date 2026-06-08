@@ -1,8 +1,8 @@
-from analysis.distance_metrics import LevenshteinCircuitDistance
 import random
 
 from .interfaces import IFitnessShaper
 from evolutionary_algorithm.population import Population
+from analysis.interfaces import IDistanceMetric
 
 
 class NullFitnessShaper(IFitnessShaper):
@@ -13,13 +13,13 @@ class NullFitnessShaper(IFitnessShaper):
 
 class FitnessSharingShaper(IFitnessShaper):
     """
-    Aplica Fitness Sharing usando amostragem e a distância de Levenshtein.
+    Aplica Fitness Sharing usando amostragem e uma métrica de distância injetada.
     """
-    def __init__(self, sharing_radius: float, alpha: float, sample_size: int = 50):
+    def __init__(self, sharing_radius: float, alpha: float, distance_metric: IDistanceMetric, sample_size):
         self._sigma_share = sharing_radius
         self._alpha = alpha
         self._sample_size = sample_size
-        self._distance_metric = LevenshteinCircuitDistance()
+        self._distance_metric = distance_metric
 
     def shape(self, population: Population):
         individuals = population.get_individuals()

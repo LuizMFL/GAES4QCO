@@ -59,7 +59,7 @@ class ExperimentRunner:
                 "allowed_gates": self.config.allowed_gates
             },
             "selection_strategy": {
-                "fitness": "weighted" if phase_config.use_weighted_fitness else "default",
+                "fitness": phase_config.fitness_evaluator.value if hasattr(phase_config.fitness_evaluator, 'value') else phase_config.fitness_evaluator,
                 "fitness_shaper": "sharing" if phase_config.use_fitness_sharing else "default",
                 "rate_adapter": "adaptive" if phase_config.use_adaptive_rates else "default",
                 "mutation": "bandit" if phase_config.use_bandit_mutation else "default",
@@ -75,8 +75,6 @@ class ExperimentRunner:
                 "mutation_rate": self.config.mutation_rate,
                 "max_depth": self.config.max_depth,
                 "min_depth": self.config.min_depth,
-                "diversity_threshold": self.config.diversity_threshold,
-                "injection_rate": self.config.injection_rate,
                 "stepsize": phase_config.use_stepsize,
                 "c_factor": self.config.c_factor
             },
@@ -139,6 +137,9 @@ class ExperimentRunner:
                 else:
                     logging.warning(f"Arquivo de resultado existe, mas checkpoint em {checkpoint_folder} está vazio. Re-executando fase.")
 
+            self._configure_container_for_phase(phase, results_file_path)
+
+            # 2º Agora a Factory lerá 'config.quantum.allowed_gates' corretamente
             if not population.get_individuals():
                 logging.info("Criando população inicial aleatória.")
                 pop_factory = self.container.population_fac()
@@ -146,9 +147,8 @@ class ExperimentRunner:
                     self.config.population_size, self.config.num_qubits,
                     self.config.max_depth, self.config.min_depth, phase.use_stepsize
                 )
+            # -----------------------------------------------------------
 
-            self._configure_container_for_phase(phase, results_file_path)
-            
             logging.info(f"Salvando configuração da fase em: {config_file_path}")
             config_file_path.parent.mkdir(parents=True, exist_ok=True)
             with open(config_file_path, 'w', encoding='utf-8') as f:
@@ -156,7 +156,6 @@ class ExperimentRunner:
 
             optimizer = self.container.optimizer()
             population = optimizer.run(population, phase.generations, phase.fidelity_threshold_stop)
-
             logging.info("Otimização da fase concluída.")
             adapter = self.container.circuit.qiskit_adapter()
             save_final_population(population.get_individuals(), adapter, config_file_path)

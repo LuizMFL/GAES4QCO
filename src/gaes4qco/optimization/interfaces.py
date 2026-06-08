@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Tuple
+from shared.value_objects import EvolutionRates
 
 from quantum_circuit.circuit import Circuit
 from evolutionary_algorithm.population import Population
@@ -26,7 +27,7 @@ class IProgressObserver(ABC):
     """Interface para classes que observam e registram o progresso do algoritmo."""
 
     @abstractmethod
-    def update(self, generation: int, population: Population, mutation_rate: float = 0.0, crossover_rate: float = 0.0):
+    def update(self, generation: int, population: Population, mutation_rate: float, crossover_rate: float):
         """Método chamado a cada geração para registrar o estado da população."""
         pass
 
@@ -38,4 +39,13 @@ class IProgressObserver(ABC):
     @abstractmethod
     def set_summary(self, duration_seconds: float, final_generation: int, total_evaluations: int, stopping_reason: str, best_circuit: Circuit):
         """Define o resumo final da fase, incluindo duração e outras métricas."""
+        pass
+
+
+class IRateAdapter(ABC):
+    """Interface para estratégias que adaptam as taxas de evolução."""
+
+    @abstractmethod
+    def adapt(self, diversity: float) -> EvolutionRates:
+        """Recebe a diversidade atual e retorna novas taxas de crossover e mutação."""
         pass

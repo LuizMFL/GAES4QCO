@@ -1,29 +1,5 @@
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-
-
-@dataclass
-class EvolutionRates:
-    """Contém as taxas de crossover e mutação para uma geração."""
-    crossover_rate: float
-    mutation_rate: float
-
-    def __post_init__(self):
-        if not (0 <= self.crossover_rate <= 1):
-            raise ValueError("Crossover rate must be in [0, 1].")
-        if not (0 <= self.mutation_rate <= 1):
-            raise ValueError("Mutation rate must be in [0, 1].")
-
-
-class IRateAdapter(ABC):
-    """Interface for strategies that adapt evolutionary rates."""
-
-    @abstractmethod
-    def adapt(self, diversity: float) -> EvolutionRates:
-        """
-        Receives the current diversity and returns updated crossover and mutation rates.
-        """
-        ...
+from optimization.interfaces import IRateAdapter
+from shared.value_objects import EvolutionRates
 
 
 class FixedRateAdapter(IRateAdapter):
@@ -40,8 +16,6 @@ class FixedRateAdapter(IRateAdapter):
 class DiversityAdaptiveRateAdapter(IRateAdapter):
     """
     Adapta as taxas de evolução com base na diversidade genética da população.
-    - Baixa diversidade: Aumenta a mutação (exploração).
-    - Alta diversidade: Aumenta o crossover (explotação).
     """
 
     def __init__(self, min_mutation_rate: float, max_mutation_rate: float,
@@ -53,8 +27,7 @@ class DiversityAdaptiveRateAdapter(IRateAdapter):
 
     def adapt(self, diversity: float) -> EvolutionRates:
         """
-        Calcula as novas taxas usando uma interpolação linear inversa.
-        Quanto menor a diversidade, maior a taxa de mutação e menor a de crossover.
+        Calcula as novas taxas usando uma interpolação linear.
         """
         # Normaliza a diversidade para o intervalo [0, 1] (já está nesse intervalo)
         diversity_norm = max(0.0, min(1.0, diversity))

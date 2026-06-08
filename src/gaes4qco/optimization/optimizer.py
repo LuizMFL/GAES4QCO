@@ -1,8 +1,8 @@
-from typing import List, Optional, Dict, Tuple
+from typing import Optional
 import logging
 import time
 
-from evolutionary_algorithm.population_factory import PopulationFactory
+from analysis.interfaces import IDistanceMetric
 from evolutionary_algorithm.interfaces import ISelectionStrategy, IMutationPopulation, IPopulationCrossover
 from evolutionary_algorithm.population import Population
 from evolutionary_algorithm.rate_adapter import IRateAdapter
@@ -24,8 +24,7 @@ class Optimizer:
             mutation: IMutationPopulation,
             rate_adapter: IRateAdapter,
             fitness_shaper: IFitnessShaper,
-            observer: IProgressObserver,
-            **kwargs 
+            observer: IProgressObserver
     ):
         self._fitness_evaluator = fitness_evaluator
         self._parent_selection = parent_selection
@@ -45,7 +44,12 @@ class Optimizer:
     ) -> Population:
         phase_start_time = time.time()
         self._total_evaluations = 0
-        
+
+        for ind in initial_population.get_individuals():
+            ind.fitness = None
+            ind.base_fitness = None
+            ind.fidelity = None
+
         current_population = initial_population
         stopping_reason = "max_generations_reached"
 

@@ -24,7 +24,7 @@ class JsonProgressObserver(IProgressObserver):
         if not evaluated_individuals:
             return
 
-        best_individual = max(evaluated_individuals, key=lambda ind: ind.fitness)
+        best_individual = max(evaluated_individuals, key=lambda ind: ind.base_fitness)
         
         fitness_values = [ind.fitness for ind in evaluated_individuals]
         fidelity_values = [ind.fidelity for ind in evaluated_individuals if ind.fidelity is not None]

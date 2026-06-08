@@ -23,13 +23,19 @@ from experiment.config import ExperimentConfig
 PROJECT_PATH = Path(__file__).parents[2]
 RESULTS_DIR = PROJECT_PATH / "results"
 
+
 def main():
     """
     Analisa todos os testes definidos em `tests/`, calcula a taxa de erro média
     dos circuitos finais (última geração) e gera gráficos e ranking das melhores configurações.
     """
     container = AppContainer()
-    container.config.from_dict({"num_qubits": ExperimentConfig.num_qubits})
+    container.config.from_dict({
+        "quantum": {
+            "num_qubits": ExperimentConfig.num_qubits,
+            "allowed_gates": None  # Permite a GateFactory remontar qualquer porta do JSON
+        }
+    })
     quantum_circuit_container = container.circuit()
 
     # === Diretórios ===

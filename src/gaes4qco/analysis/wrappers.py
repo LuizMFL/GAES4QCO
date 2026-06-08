@@ -1,6 +1,7 @@
 from analysis.profiler import profile_time
+from optimization.interfaces import IFitnessEvaluator, IFitnessShaper, IRateAdapter
 from evolutionary_algorithm.interfaces import ISelectionStrategy, IPopulationCrossover, IMutationPopulation
-from optimization.interfaces import IFitnessEvaluator, IFitnessShaper
+from analysis.interfaces import IDistanceMetric
 
 
 class BaseProfilerWrapper:
@@ -47,3 +48,15 @@ class MutationProfilerWrapper(BaseProfilerWrapper, IMutationPopulation):
     @profile_time
     def mutate(self, population):
         return self._decorated.mutate(population)
+
+
+class RateAdapterProfilerWrapper(BaseProfilerWrapper, IRateAdapter):
+    @profile_time
+    def adapt(self, diversity: float):
+        return self._decorated.adapt(diversity)
+
+
+class DistanceMetricProfilerWrapper(BaseProfilerWrapper, IDistanceMetric):
+    @profile_time
+    def calculate(self, *args, **kwargs):
+        return self._decorated.calculate(*args, **kwargs)

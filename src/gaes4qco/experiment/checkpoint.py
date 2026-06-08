@@ -4,9 +4,6 @@ from typing import Optional
 
 from evolutionary_algorithm.population_factory import PopulationFactory
 from experiment.config import ExperimentConfig
-from quantum_circuit.circuit import Circuit
-from quantum_circuit.column import Column
-from quantum_circuit.gate import Gate
 from evolutionary_algorithm.population import Population
 
 

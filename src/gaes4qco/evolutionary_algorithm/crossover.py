@@ -4,7 +4,7 @@ from typing import Tuple, List
 
 import numpy as np
 
-from .interfaces import IPopulationCrossover, ICrossoverStrategy, IMutationPopulation
+from .interfaces import IPopulationCrossover, ICrossoverStrategy
 from .population import Population
 from quantum_circuit.circuit import Circuit, Column
 from quantum_circuit.gate_factory import GateFactory
@@ -128,26 +128,23 @@ class SinglePointCrossover(ICrossoverStrategy):
     Crossover de Ponto Único.
     Sorteia uma única coluna para ser o ponto de troca de material genético.
     """
+
     def crossover(self, parent_1: Circuit, parent_2: Circuit) -> Tuple[Circuit, Circuit]:
         min_depth = min(parent_1.depth, parent_2.depth)
         if min_depth < 2:
             return parent_1.copy(), parent_2.copy()
 
         crossover_point = random.randint(1, min_depth - 1)
-        
+
         p1_cols = parent_1.columns
         p2_cols = parent_2.columns
 
-        # Cria os filhos trocando as "caudas"
+        # O fatiamento em Python já captura a lista até o final absoluto.
+        # Child 1 assume o prefixo do P1 e a cauda (até o fim) do P2.
         child1_cols = [col.copy() for col in chain(p1_cols[:crossover_point], p2_cols[crossover_point:])]
-        child2_cols = [col.copy() for col in chain(p2_cols[:crossover_point], p1_cols[crossover_point:])]
 
-        # Adiciona o restante do pai mais longo, se houver
-        if len(p1_cols) > len(p2_cols):
-            child2_cols.extend([col.copy() for col in p1_cols[len(p2_cols):]])
-        elif len(p2_cols) > len(p1_cols):
-            child1_cols.extend([col.copy() for col in p2_cols[len(p1_cols):]])
+        # Child 2 assume o prefixo do P2 e a cauda (até o fim) do P1.
+        child2_cols = [col.copy() for col in chain(p2_cols[:crossover_point], p1_cols[crossover_point:])]
 
         num_qubits = max(parent_1.count_qubits, parent_2.count_qubits)
         return Circuit(num_qubits, child1_cols), Circuit(num_qubits, child2_cols)
-
