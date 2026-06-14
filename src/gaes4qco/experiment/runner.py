@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List
 
 import numpy as np
+from tqdm import tqdm
 
 from evolutionary_algorithm.population import Population
 from quantum_circuit.circuit import Circuit
@@ -94,14 +95,14 @@ class ExperimentRunner:
             }
         })
 
-    def run(self) -> dict:
+    def run(self, position_id: int) -> dict:
         logging.info(f"--- Iniciando Experimento com Seed {self.config.seed} para {self.test_filename} ---")
         start_time = time.time()
         random.seed(self.config.seed)
         np.random.seed(self.config.seed)
 
         config_file_paths = list(self.config.config_file_path)
-        
+
         if self.config.resume_from_checkpoint:
             last_phase_result_path = Path(str(config_file_paths[-1]).replace("_config.json", "_results.json"))
             if last_phase_result_path.exists():
@@ -119,51 +120,61 @@ class ExperimentRunner:
                 }
 
         population: Population = Population()
-        
-        for i, phase in enumerate(self.config.phases):
-            logging.info(f"--- FASE {i} ---")
-            
-            config_file_path = Path(config_file_paths[i])
-            results_file_path = str(config_file_path).replace("_config.json", "_results.json")
-            
-            if self.config.resume_from_checkpoint and Path(results_file_path).exists():
-                logging.info(f"Resultado para a Fase {i} já existe. Carregando população do checkpoint.")
-                checkpoint_folder = circuits_folder_path(config_file_path)
-                checkpoint_manager = self.container.checkpoint_manager(config=self.config)
-                loaded_population = checkpoint_manager.load_phase_checkpoint(checkpoint_folder)
-                if loaded_population and loaded_population.get_individuals():
-                    population = loaded_population
-                    continue
-                else:
-                    logging.warning(f"Arquivo de resultado existe, mas checkpoint em {checkpoint_folder} está vazio. Re-executando fase.")
 
-            self._configure_container_for_phase(phase, results_file_path)
+        total_generations = sum(p.generations for p in self.config.phases)
+        short_name = Path(self.test_filename).stem[:15]
 
-            # 2º Agora a Factory lerá 'config.quantum.allowed_gates' corretamente
-            if not population.get_individuals():
-                logging.info("Criando população inicial aleatória.")
-                pop_factory = self.container.population_fac()
-                population = pop_factory.create(
-                    self.config.population_size, self.config.num_qubits,
-                    self.config.max_depth, self.config.min_depth, phase.use_stepsize
-                )
-            # -----------------------------------------------------------
+        # Cria a barra visual do experimento
+        with tqdm(
+                total=total_generations,
+                position=position_id,
+                leave=False,  # Some quando terminar, para o próximo experimento assumir a linha
+                dynamic_ncols=True,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
+        ) as pbar:
 
-            logging.info(f"Salvando configuração da fase em: {config_file_path}")
-            config_file_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(config_file_path, 'w', encoding='utf-8') as f:
-                json.dump(self.config.to_dict(), f, indent=4)
+            for i, phase in enumerate(self.config.phases):
+                logging.info(f"--- FASE {i} ---")
 
-            optimizer = self.container.optimizer()
-            population = optimizer.run(population, phase.generations, phase.fidelity_threshold_stop)
-            logging.info("Otimização da fase concluída.")
-            adapter = self.container.circuit.qiskit_adapter()
-            save_final_population(population.get_individuals(), adapter, config_file_path)
+                # Atualiza o status visual mostrando a transição de fase!
+                pbar.set_description(f"⚙️ {short_name} [Fase {i + 1}/{len(self.config.phases)}]")
 
-        end_time = time.time()
-        duration = end_time - start_time
-        logging.info(f"--- Fim Experimento Seed {self.config.seed} | Duração: {duration:.2f}s ---")
+                config_file_path = Path(config_file_paths[i])
+                results_file_path = str(config_file_path).replace("_config.json", "_results.json")
 
+                if self.config.resume_from_checkpoint and Path(results_file_path).exists():
+                    checkpoint_folder = circuits_folder_path(config_file_path)
+                    checkpoint_manager = self.container.checkpoint_manager(config=self.config)
+                    loaded_population = checkpoint_manager.load_phase_checkpoint(checkpoint_folder)
+                    if loaded_population and loaded_population.get_individuals():
+                        population = loaded_population
+                        # Preenche a barra para os checkpoints pulados
+                        pbar.update(phase.generations)
+                        continue
+
+                self._configure_container_for_phase(phase, results_file_path)
+
+                if not population.get_individuals():
+                    pop_factory = self.container.population_fac()
+                    population = pop_factory.create(
+                        self.config.population_size, self.config.num_qubits,
+                        self.config.max_depth, self.config.min_depth, phase.use_stepsize
+                    )
+
+                config_file_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(config_file_path, 'w', encoding='utf-8') as f:
+                    json.dump(self.config.to_dict(), f, indent=4)
+
+                optimizer = self.container.optimizer()
+                # Passa a barra de progresso para o Optimizer alimentar!
+                population = optimizer.run(population, phase.generations, phase.fidelity_threshold_stop, pbar)
+
+                adapter = self.container.circuit.qiskit_adapter()
+                save_final_population(population.get_individuals(), adapter, config_file_path)
+
+            pbar.set_description(f"✅ {short_name} Concluído")
+
+        duration = time.time() - start_time
         best_circuit = population.get_fittest()
         return {
             "seed": self.config.seed,

@@ -40,7 +40,8 @@ class Optimizer:
             self,
             initial_population: Population,
             max_generations: int,
-            fidelity_threshold: Optional[float]
+            fidelity_threshold: Optional[float],
+            pbar=None
     ) -> Population:
         phase_start_time = time.time()
         self._total_evaluations = 0
@@ -57,6 +58,9 @@ class Optimizer:
         self._evaluate_population(current_population)
 
         for gen in range(max_generations):
+            if pbar:
+                pbar.update(1)
+
             mutation_rate = getattr(self._mutation, 'mutation_rate', 0)
             crossover_rate = getattr(self._crossover, 'crossover_rate', 0)
             if self._observer:
@@ -100,8 +104,13 @@ class Optimizer:
                 if best_ind and best_ind.fidelity is not None and best_ind.fidelity >= fidelity_threshold:
                     logging.info(f"-> Fidelity threshold {fidelity_threshold} reached at generation {gen}.")
                     stopping_reason = "fidelity_threshold_reached"
+
+                    # Se parar cedo, preenchemos o resto da barra referente a esta fase
+                    # para que a próxima fase não comece na posição errada.
+                    if pbar:
+                        pbar.update(max_generations - gen - 1)
                     break
-        
+
         final_gen_index = max_generations if stopping_reason == "max_generations_reached" else gen + 1
         phase_duration = time.time() - phase_start_time
 

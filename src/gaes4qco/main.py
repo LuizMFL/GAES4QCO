@@ -8,18 +8,14 @@ from experiment.test_loader import TestConfigLoader
 
 
 def main():
-    """
-    Ponto de entrada para executar todos os experimentos definidos em `tests/`.
-    """
     project_root = Path(__file__).resolve().parents[2]
     log_file_path = project_root / "execution.log"
-    
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - [%(processName)s] - %(message)s',
         handlers=[
-            logging.FileHandler(log_file_path, mode='w'),
-            logging.StreamHandler(sys.stdout)
+            logging.FileHandler(log_file_path, mode='w')
         ]
     )
 
@@ -37,7 +33,7 @@ def main():
 
     num_processes = min(len(experiment_configs), cpu_count())
     logging.info(f"🧠 Running {len(experiment_configs)} experiments in parallel across {num_processes} processes...")
-    
+
     manager = ParallelExperimentManager(
         configs=experiment_configs,
         filepaths=filepaths,

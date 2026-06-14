@@ -2,20 +2,20 @@ import json
 import warnings
 from pathlib import Path
 from collections import defaultdict
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool, cpu_count, RLock
 import time
 
+from tqdm import tqdm
 import numpy as np
 from qiskit.quantum_info import Statevector
 from qiskit import transpile
 
-# Ignora os avisos de deprecamento do Qiskit IBM Provider para limpar o terminal
+# Ignora os avisos de deprecamento do Qiskit IBM Provider
 warnings.filterwarnings("ignore", category=UserWarning, module="qiskit_ibm_provider.api.session")
 
 from containers import AppContainer
 from experiment.config import ExperimentConfig
 
-# Constantes globais
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TESTS_DIR = PROJECT_ROOT / "tests"
 RESULTS_DIR = PROJECT_ROOT / "results"
@@ -23,20 +23,17 @@ OUTPUT_JSON = RESULTS_DIR / "final_benchmark_ranking.json"
 SHOTS = 2 ** 15
 
 
+def init_pool(tqdm_lock):
+    tqdm.set_lock(tqdm_lock)
+
+
 def process_target(target_group_data: dict) -> dict:
-    """
-    Função executada em um processo isolado (Worker).
-    Recebe os dados de um Circuito Alvo e a lista de testes associados a ele.
-    Realiza a simulação de ruído e retorna o relatório local.
-    """
     target_key = target_group_data["target_key"]
     target_path = target_group_data["target_path"]
     associated_tests = target_group_data["associated_tests"]
+    position = target_group_data["position"]
+    existing_data = target_group_data["existing_data"]
 
-    print(f"[Worker] 🚀 Iniciando avaliação do Alvo: {target_key}")
-
-    # Re-instancia o container dentro do processo filho,
-    # pois objetos como BackendV2 não são 'pickláveis' (serializáveis) entre processos de forma segura.
     container = AppContainer()
     container.config.from_dict({
         "quantum": {
@@ -55,67 +52,90 @@ def process_target(target_group_data: dict) -> dict:
         "optimized_circuits": []
     }
 
-    # 1. Avalia o Circuito Alvo Original
     if not target_path.exists():
-        print(f"[Worker] ⚠️ Arquivo alvo não encontrado: {target_path}")
+        tqdm.write(f"⚠️ Arquivo alvo não encontrado: {target_path}")
         return report_entry
 
+    # 1. Carrega a matriz teórica do alvo (necessária para comparar os novos circuitos)
     with open(target_path, "r", encoding="utf-8") as f:
         target_data = json.load(f)
-
     target_circuit = circuit_factory.create_from_dict(target_data)
     qiskit_target = adapter.from_domain(target_circuit)
     target_sv = Statevector.from_instruction(qiskit_target)
 
-    target_error = error_analyzer.calculate_error_rate(
-        circuit=target_circuit,
-        target_statevector=target_sv,
-        shots=SHOTS,
-        verbose=False
-    )
+    # 2. CACHE DO ALVO: Se já avaliamos o ruído do alvo no passado, reaproveita!
+    if "target_error" in existing_data:
+        report_entry["target_error"] = existing_data["target_error"]
+        report_entry["target_logical_depth"] = existing_data.get("target_logical_depth", target_circuit.depth)
+        report_entry["target_physical_depth"] = existing_data.get("target_physical_depth", 0)
+    else:
+        target_error = error_analyzer.calculate_error_rate(
+            circuit=target_circuit,
+            target_statevector=target_sv,
+            shots=SHOTS,
+            verbose=False
+        )
+        transpiled_target = transpile(qiskit_target, backend=backend, optimization_level=0)
+        report_entry["target_error"] = target_error
+        report_entry["target_logical_depth"] = target_circuit.depth
+        report_entry["target_physical_depth"] = transpiled_target.depth()
 
-    transpiled_target = transpile(qiskit_target, backend=backend, optimization_level=0)
+    # Cria um mapa rápido de circuitos já avaliados para este alvo (O(1) lookup)
+    cache_map = {c["filename"]: c for c in existing_data.get("optimized_circuits", [])}
 
-    report_entry["target_error"] = target_error
-    report_entry["target_logical_depth"] = target_circuit.depth
-    report_entry["target_physical_depth"] = transpiled_target.depth()
-
-    # 2. Avalia todos os circuitos otimizados deste alvo
+    all_circuit_files = []
     for test in associated_tests:
         test_name = test["test_name"]
         circuits_dir = test["circuits_dir"]
+        for circ_file in Path(circuits_dir).glob("*.json"):
+            all_circuit_files.append((test_name, circ_file))
 
-        circuit_files = list(Path(circuits_dir).glob("*.json"))
+    short_name = target_key.replace(".json", "").replace("target_", "")
+    desc = f"🎯 Alvo {short_name: <10}"
 
-        for circ_file in circuit_files:
-            with open(circ_file, "r", encoding="utf-8") as f:
-                circ_data = json.load(f)
+    for test_name, circ_file in tqdm(
+            all_circuit_files,
+            position=position,
+            desc=desc,
+            leave=True,
+            dynamic_ncols=True,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
+    ):
+        # CACHE DOS CIRCUITOS: Se já processou, copia os dados e pula o simulador
+        if circ_file.name in cache_map:
+            cached_result = cache_map[circ_file.name]
+            # Garante que o nome do teste está atualizado caso tenhamos movido pastas
+            cached_result["test_name"] = test_name
+            report_entry["optimized_circuits"].append(cached_result)
+            continue
 
-            opt_circuit = circuit_factory.create_from_dict(circ_data)
+        # Se for um circuito novo, faz a simulação de ruído
+        with open(circ_file, "r", encoding="utf-8") as f:
+            circ_data = json.load(f)
 
-            try:
-                opt_error = error_analyzer.calculate_error_rate(
-                    circuit=opt_circuit,
-                    target_statevector=target_sv,
-                    shots=SHOTS,
-                    verbose=False
-                )
+        opt_circuit = circuit_factory.create_from_dict(circ_data)
 
-                qiskit_opt = adapter.from_domain(opt_circuit)
-                transpiled_opt = transpile(qiskit_opt, backend=backend, optimization_level=0)
+        try:
+            opt_error = error_analyzer.calculate_error_rate(
+                circuit=opt_circuit,
+                target_statevector=target_sv,
+                shots=SHOTS,
+                verbose=False
+            )
+            qiskit_opt = adapter.from_domain(opt_circuit)
+            transpiled_opt = transpile(qiskit_opt, backend=backend, optimization_level=0)
 
-                report_entry["optimized_circuits"].append({
-                    "test_name": test_name,
-                    "filename": circ_file.name,
-                    "error_rate": opt_error,
-                    "logical_depth": opt_circuit.depth,
-                    "physical_depth": transpiled_opt.depth(),
-                    "fidelity_approx": opt_circuit.fidelity
-                })
-            except Exception as e:
-                print(f"[Worker] ❌ Erro ao avaliar {circ_file.name} no alvo {target_key}: {e}")
+            report_entry["optimized_circuits"].append({
+                "test_name": test_name,
+                "filename": circ_file.name,
+                "error_rate": opt_error,
+                "logical_depth": opt_circuit.depth,
+                "physical_depth": transpiled_opt.depth(),
+                "fidelity_approx": opt_circuit.fidelity
+            })
+        except Exception as e:
+            tqdm.write(f"❌ Erro ao avaliar {circ_file.name} no alvo {target_key}: {e}")
 
-    print(f"[Worker] ✅ Concluído alvo: {target_key} ({len(report_entry['optimized_circuits'])} circuitos avaliados)")
     return report_entry
 
 
@@ -127,8 +147,17 @@ def main():
         print("⚠️ Nenhum arquivo de teste encontrado.")
         return
 
-    # === FASE 1: MAPEAMENTO DOS TAREFAS ===
-    # Agrupa quais pastas de circuitos otimizados pertencem a qual alvo (Target).
+    # --- NOVO: Carrega o arquivo de cache geral se existir ---
+    existing_report = {}
+    if OUTPUT_JSON.exists():
+        try:
+            with open(OUTPUT_JSON, "r", encoding="utf-8") as f:
+                existing_report = json.load(f)
+            print(f"📦 Cache carregado: {len(existing_report)} alvos processados anteriormente encontrados.")
+        except Exception as e:
+            print(f"⚠️ Erro ao ler cache existente (será reescrito): {e}")
+
+    # === FASE 1: MAPEAMENTO DAS TAREFAS ===
     targets_map = defaultdict(lambda: {"target_path": None, "associated_tests": []})
 
     for test_file in test_files:
@@ -162,14 +191,15 @@ def main():
                 "circuits_dir": str(circuits_dir)
             })
 
-    # Prepara os pacotes de dados brutos que serão enviados para os processos filhos.
     task_payloads = []
-    for target_key, data in targets_map.items():
+    for idx, (target_key, data) in enumerate(targets_map.items()):
         if data["associated_tests"]:
             task_payloads.append({
+                "position": idx + 1,
                 "target_key": target_key,
                 "target_path": data["target_path"],
-                "associated_tests": data["associated_tests"]
+                "associated_tests": data["associated_tests"],
+                "existing_data": existing_report.get(target_key, {})  # Passa os dados pré-calculados para o Worker
             })
 
     print(f"📊 Encontrados {len(task_payloads)} circuitos alvo distintos para avaliação.")
@@ -177,16 +207,29 @@ def main():
     # === FASE 2: EXECUÇÃO EM PARALELO ===
     start_time = time.time()
     max_workers = min(len(task_payloads), cpu_count())
-    print(f"🧠 Distribuindo tarefas em {max_workers} núcleos de processamento...")
+    print(f"🧠 Distribuindo tarefas em {max_workers} núcleos de processamento...\n")
 
-    # Cria o Pool e mapeia as tarefas. O Pool cuidará de instanciar os processos filhos.
-    with Pool(processes=max_workers) as pool:
-        results_list = pool.map(process_target, task_payloads)
+    results_list = []
+
+    tqdm_lock = RLock()
+    with Pool(processes=max_workers, initializer=init_pool, initargs=(tqdm_lock,)) as pool:
+        for res in tqdm(
+                pool.imap_unordered(process_target, task_payloads),
+                total=len(task_payloads),
+                desc="🚀 Progresso Geral ",
+                position=0,
+                unit="alvo",
+                leave=True,
+                dynamic_ncols=True,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
+        ):
+            results_list.append(res)
+
+    print("\n" * (len(task_payloads) + 1))
 
     elapsed_time = time.time() - start_time
     print(f"⏱️ Simulação em lote concluída em {elapsed_time:.2f} segundos.")
 
-    # Reagrupa os resultados no dicionário 'report'
     report = {}
     for res in results_list:
         if res and "target_error" in res:
@@ -240,7 +283,6 @@ def main():
                 l_depth = circ["logical_depth"]
                 p_depth = circ["physical_depth"]
                 fid = circ.get("fidelity_approx", 0.0)
-
                 is_better = "🟢 VENCEU " if err < data["target_error"] else "🔴 PERDEU"
 
                 print(
@@ -251,7 +293,7 @@ def main():
     with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=4)
 
-    print(f"💾 Relatório agrupado salvo em: {OUTPUT_JSON}")
+    print(f"💾 Relatório agrupado e cacheados salvo em: {OUTPUT_JSON}")
 
 
 if __name__ == "__main__":
