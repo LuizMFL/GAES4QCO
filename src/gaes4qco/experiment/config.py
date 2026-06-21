@@ -31,6 +31,14 @@ class PhaseConfig:
     crossover_strategy: CrossoverType
     generations: int
     fidelity_threshold_stop: Optional[float]
+
+    crossover_rate: Optional[float] = None
+    mutation_rate: Optional[float] = None
+    min_mutation_rate: Optional[float] = None
+    max_mutation_rate: Optional[float] = None
+    min_crossover_rate: Optional[float] = None
+    max_crossover_rate: Optional[float] = None
+
     result_filepath: Optional[str] = None
 
 
@@ -42,51 +50,39 @@ class ExperimentConfig:
     filename_target_circuit: str
     phases: List[PhaseConfig]
     resume_from_checkpoint: bool
-    
-    # Adicionado valores padrão para robustez
+
     max_depth: int = 40
     min_depth: int = 4
-
     allowed_gates: Optional[List[str]] = None
     target_depth: int = 20
     num_qubits: int = 4
     elitism_size: int = 10
     population_size: int = 200
-    
     tournament_size: Optional[int] = None
-    crossover_rate: Optional[float] = None
-    mutation_rate: Optional[float] = None
-    min_mutation_rate: Optional[float] = None
-    max_mutation_rate: Optional[float] = None
-    min_crossover_rate: Optional[float] = None
-    max_crossover_rate: Optional[float] = None
     sharing_radius: Optional[float] = None
     alpha: Optional[float] = None
     c_factor: Optional[float] = None
 
     def __post_init__(self):
-        uses_fixed_rates = any(not p.use_adaptive_rates for p in self.phases)
-        uses_adaptive_rates = any(p.use_adaptive_rates for p in self.phases)
         uses_tournament = any(
-            p.parent_selection == SelectionType.TOURNAMENT or 
-            p.survivor_selection == SelectionType.TOURNAMENT 
+            p.parent_selection == SelectionType.TOURNAMENT or
+            p.survivor_selection == SelectionType.TOURNAMENT
             for p in self.phases
         )
         uses_fitness_sharing = any(p.use_fitness_sharing for p in self.phases)
         uses_stepsize = any(p.use_stepsize for p in self.phases)
 
-        if uses_fixed_rates and (self.crossover_rate is None or self.mutation_rate is None):
-            raise ValueError("crossover_rate e mutation_rate são exigidos para taxas não adaptativas.")
-        
-        if uses_adaptive_rates and None in (self.min_mutation_rate, self.max_mutation_rate, self.min_crossover_rate, self.max_crossover_rate):
-            raise ValueError("min/max rates são exigidos para taxas adaptativas.")
+        for i, p in enumerate(self.phases):
+            if not p.use_adaptive_rates and (p.crossover_rate is None or p.mutation_rate is None):
+                raise ValueError(f"crossover_rate e mutation_rate são exigidos na fase {i} (taxas fixas).")
+            if p.use_adaptive_rates and None in (p.min_mutation_rate, p.max_mutation_rate, p.min_crossover_rate,
+                                                 p.max_crossover_rate):
+                raise ValueError(f"min/max rates são exigidos na fase {i} (taxas adaptativas).")
 
         if uses_tournament and self.tournament_size is None:
             raise ValueError("tournament_size é exigido para seleção de torneio.")
-
         if uses_fitness_sharing and (self.sharing_radius is None or self.alpha is None):
             raise ValueError("sharing_radius e alpha são exigidos para fitness sharing.")
-
         if uses_stepsize and self.c_factor is None:
             raise ValueError("c_factor é exigido para stepsize.")
 

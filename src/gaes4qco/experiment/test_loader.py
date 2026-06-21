@@ -104,6 +104,12 @@ class TestConfigLoader:
             crossover_strategy=phase_dict["crossover_strategy"].lower(),
             generations=int(phase_dict["generations"]),
             fidelity_threshold_stop=phase_dict.get("fidelity_threshold_stop"),
+            crossover_rate=phase_dict.get("crossover_rate"),
+            mutation_rate=phase_dict.get("mutation_rate"),
+            min_mutation_rate=phase_dict.get("min_mutation_rate"),
+            max_mutation_rate=phase_dict.get("max_mutation_rate"),
+            min_crossover_rate=phase_dict.get("min_crossover_rate"),
+            max_crossover_rate=phase_dict.get("max_crossover_rate"),
             result_filepath=phase_dict.get("result_filepath")
         )
 
@@ -133,10 +139,7 @@ class TestConfigLoader:
         # --- Campos opcionais (se existirem, sobrescrevem os defaults do dataclass) ---
         optional_keys = [
             "allowed_gates", "num_qubits", "elitism_size", "population_size",
-            "tournament_size", "crossover_rate", "mutation_rate",
-            "min_mutation_rate", "max_mutation_rate",
-            "min_crossover_rate", "max_crossover_rate",
-            "diversity_threshold", "injection_rate",
+            "tournament_size", "diversity_threshold", "injection_rate",
             "sharing_radius", "alpha", "c_factor"
         ]
         for key in optional_keys:
