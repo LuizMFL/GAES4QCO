@@ -25,7 +25,7 @@ class TestConfigLoader:
     def __init__(self, tests_dir: Path):
         self.tests_dir = tests_dir
         if not self.tests_dir.exists():
-          raise FileNotFoundError(f"Tests directory not found: {self.tests_dir}")
+            raise FileNotFoundError(f"Tests directory not found: {self.tests_dir}")
 
     @staticmethod
     def _save_circuit_details(circuit: Circuit, adapter: IQuantumCircuitAdapter, filepath_base: str):
@@ -36,6 +36,28 @@ class TestConfigLoader:
         qiskit_circuit = adapter.from_domain(circuit)
         with open(f"{filepath_base}.txt", "w", encoding="utf-8") as f:
             f.write(str(qiskit_circuit.draw("text")))
+
+    @staticmethod
+    def _load_target_from_file(filepath_json: Path) -> Tuple[Statevector, str]:
+        """
+        NOVO: Carrega um circuito alvo explícito a partir de um arquivo JSON existente.
+        """
+        if not filepath_json.exists():
+            raise FileNotFoundError(f"Arquivo alvo explícito não encontrado em: {filepath_json}")
+
+        print(f"📂 Loading explicitly defined target circuit from {filepath_json.name}")
+        with open(filepath_json, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        container = QuantumCircuitContainer()
+        adapter = container.qiskit_adapter()
+        factory = container.circuit_factory()
+
+        circuit = factory.create_from_dict(data)
+        qiskit_circuit = adapter.from_domain(circuit)
+        target_sv = Statevector.from_instruction(qiskit_circuit)
+
+        return target_sv, str(filepath_json.with_suffix(''))
 
     def _load_or_create_target(
             self, num_qubits: int, depth: int, seed_target: int, allowed_gates: Optional[List[str]]
@@ -48,16 +70,7 @@ class TestConfigLoader:
         filepath_json = Path(f"{filepath_base}.json")
 
         if filepath_json.exists():
-            print(f"📂 Loading existing target circuit from {filepath_json.name}")
-            with open(filepath_json, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            container = QuantumCircuitContainer()
-            adapter = container.qiskit_adapter()
-            factory = container.circuit_factory()
-            circuit = factory.create_from_dict(data)
-            qiskit_circuit = adapter.from_domain(circuit)
-            target_sv = Statevector.from_instruction(qiskit_circuit)
-            return target_sv, str(filepath_base)
+            return self._load_target_from_file(filepath_json)
 
         # Otherwise: generate deterministically
         print(f"⚙️ Generating new target circuit (seed={seed_target})...")
@@ -117,26 +130,30 @@ class TestConfigLoader:
         """Constructs an ExperimentConfig, filling only required fields."""
         phases = [self._build_phase(p) for p in cfg["phases"]]
 
-        target_sv, target_filepath = self._load_or_create_target(
-            num_qubits=cfg.get("num_qubits", ExperimentConfig.num_qubits),
-            depth=cfg["target_depth"],
-            seed_target=cfg["seed_target"],
-            allowed_gates=cfg.get("allowed_gates"),
-        )
+        if "seed_target" not in cfg and "filename_target_circuit" in cfg:
+            target_path = PROJECT_PATH / cfg["filename_target_circuit"]
+            target_sv, target_filepath = self._load_target_from_file(target_path)
+        elif "seed_target" in cfg:
+            target_sv, target_filepath = self._load_or_create_target(
+                num_qubits=cfg.get("num_qubits", ExperimentConfig.num_qubits),
+                depth=cfg.get("target_depth", 20),  # Usa fallback caso omisso
+                seed_target=cfg["seed_target"],
+                allowed_gates=cfg.get("allowed_gates"),
+            )
+        else:
+            raise ValueError("O arquivo JSON deve conter 'seed_target' ou um 'filename_target_circuit' válido.")
 
-        # --- Campos obrigatórios ---
         required_kwargs = dict(
-            seed=cfg["seed"],
+            seed=cfg.get("seed", 42),  # Fallback seguro
             max_depth=cfg["max_depth"],
             min_depth=cfg["min_depth"],
-            target_depth=cfg["target_depth"],
+            target_depth=cfg.get("target_depth", 20),
             target_statevector_data=target_sv,
             filename_target_circuit=target_filepath,
             phases=phases,
             resume_from_checkpoint=cfg["resume_from_checkpoint"],
         )
 
-        # --- Campos opcionais (se existirem, sobrescrevem os defaults do dataclass) ---
         optional_keys = [
             "allowed_gates", "num_qubits", "elitism_size", "population_size",
             "tournament_size", "diversity_threshold", "injection_rate",
@@ -155,12 +172,11 @@ class TestConfigLoader:
         e sobrescreve o arquivo JSON original.
         """
 
-        # Função auxiliar para tentar criar caminhos relativos ao projeto
         def to_relative(path_str: str) -> str:
             try:
                 return str(Path(path_str).relative_to(PROJECT_PATH))
             except ValueError:
-                return path_str  # Fallback para o absoluto caso falhe
+                return path_str
 
         target_path = f"{exp_config.filename_target_circuit}.json"
         raw_data["filename_target_circuit"] = to_relative(target_path)
@@ -186,7 +202,6 @@ class TestConfigLoader:
                 cfg_dict = self._load_json(file_path)
                 exp_config = self._build_experiment(cfg_dict)
 
-                # NOVO: Atualiza o arquivo de origem com os caminhos calculados
                 if update_json:
                     self._update_source_json(file_path, cfg_dict, exp_config)
 
