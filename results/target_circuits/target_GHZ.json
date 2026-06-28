@@ -1,0 +1,62 @@
+{
+    "count_qubits": 4,
+    "depth": 4,
+    "fitness": null,
+    "base_fitness": null,
+    "fidelity": 1.0,
+    "nsga2_rank": -1,
+    "nsga2_crowding_distance": 0.0,
+    "columns": [
+        {
+            "gates": [
+                {
+                    "gate_class_name": "HGate",
+                    "qubits": [
+                        0
+                    ],
+                    "parameters": [],
+                    "step_sizes": []
+                }
+            ]
+        },
+        {
+            "gates": [
+                {
+                    "gate_class_name": "CXGate",
+                    "qubits": [
+                        0,
+                        1
+                    ],
+                    "parameters": [],
+                    "step_sizes": []
+                }
+            ]
+        },
+        {
+            "gates": [
+                {
+                    "gate_class_name": "CXGate",
+                    "qubits": [
+                        1,
+                        2
+                    ],
+                    "parameters": [],
+                    "step_sizes": []
+                }
+            ]
+        },
+        {
+            "gates": [
+                {
+                    "gate_class_name": "CXGate",
+                    "qubits": [
+                        2,
+                        3
+                    ],
+                    "parameters": [],
+                    "step_sizes": []
+                }
+            ]
+        }
+    ]
+}
