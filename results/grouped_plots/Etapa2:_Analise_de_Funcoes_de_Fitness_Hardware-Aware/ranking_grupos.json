@@ -1,0 +1,29 @@
+[
+    {
+        "group_name": "Baseline_Fid_Tourn_NSGA_Multi_Cnot",
+        "mean_elite_seed": 0.13863728030033212,
+        "std_elite_seed": 0.08390289040359965,
+        "mean_variance_across_seeds": 0.002690719498139408,
+        "best_individual_overall": 0.04474159238368188,
+        "num_seeds": 4,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Baseline_Fid_Tourn_NSGA_Multi",
+        "mean_elite_seed": 0.138685845886513,
+        "std_elite_seed": 0.08332449378693349,
+        "mean_variance_across_seeds": 0.002692869924887161,
+        "best_individual_overall": 0.0418210854201837,
+        "num_seeds": 4,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Baseline_Fid_Tourn_NSGA_Multi_Weighted",
+        "mean_elite_seed": 0.14275169748814992,
+        "std_elite_seed": 0.07877077253594188,
+        "mean_variance_across_seeds": 0.0028903081068153602,
+        "best_individual_overall": 0.07489391716720653,
+        "num_seeds": 4,
+        "elitism_size": 12
+    }
+]

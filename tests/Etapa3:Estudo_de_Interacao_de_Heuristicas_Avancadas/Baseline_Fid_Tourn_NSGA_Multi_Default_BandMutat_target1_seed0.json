@@ -1,0 +1,38 @@
+{
+    "seed": 100,
+    "seed_target": 10001,
+    "resume_from_checkpoint": true,
+    "num_qubits": 4,
+    "max_depth": 40,
+    "min_depth": 1,
+    "target_depth": 40,
+    "population_size": 250,
+    "elitism_size": 12,
+    "allowed_gates": [
+        "IGate",
+        "HGate",
+        "RXGate",
+        "RYGate",
+        "RZGate",
+        "CXGate"
+    ],
+    "crossover_rate": 0.8,
+    "mutation_rate": 0.25,
+    "tournament_size": 3,
+    "phases": [
+        {
+            "generations": 1000,
+            "use_stepsize": false,
+            "fitness_evaluator": "DEFAULT",
+            "use_adaptive_rates": false,
+            "use_bandit_mutation": true,
+            "use_fitness_sharing": false,
+            "parent_selection": "TOURNAMENT",
+            "survivor_selection": "NSGA2",
+            "crossover_strategy": "MULTIPOINT",
+            "fidelity_threshold_stop": 0.99999,
+            "result_filepath": "results/pha=0_FD_mu_to_ns_FX_BD_NR_NL/37652473_results.json"
+        }
+    ],
+    "filename_target_circuit": "results/target_circuits/target_seed_10001.json"
+}

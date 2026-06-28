@@ -1,0 +1,47 @@
+[
+    {
+        "group_name": "Exp_2Phases_NoPrune",
+        "mean_elite_seed": 0.18269413776891064,
+        "std_elite_seed": 0.07746678381311016,
+        "mean_variance_across_seeds": 0.00038871166574101974,
+        "best_individual_overall": 0.04720415033796232,
+        "num_seeds": 9,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Exp_3Phases_LatePrune",
+        "mean_elite_seed": 0.182943650132913,
+        "std_elite_seed": 0.07968552487110198,
+        "mean_variance_across_seeds": 0.0005592986444319002,
+        "best_individual_overall": 0.04664302240617674,
+        "num_seeds": 9,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Exp_2Phases_NoTune",
+        "mean_elite_seed": 0.18375862319155697,
+        "std_elite_seed": 0.08018471143962268,
+        "mean_variance_across_seeds": 0.0029388271842538064,
+        "best_individual_overall": 0.049156207621022276,
+        "num_seeds": 9,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Exp_3Phases_Masterpiece",
+        "mean_elite_seed": 0.1839297796162369,
+        "std_elite_seed": 0.07991084163082542,
+        "mean_variance_across_seeds": 0.0008500555823516647,
+        "best_individual_overall": 0.037186394954642356,
+        "num_seeds": 9,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Exp_2Phases_MultiPrune",
+        "mean_elite_seed": 0.18587825983467732,
+        "std_elite_seed": 0.07855095297124697,
+        "mean_variance_across_seeds": 0.004172857816367569,
+        "best_individual_overall": 0.03931244911085884,
+        "num_seeds": 9,
+        "elitism_size": 12
+    }
+]

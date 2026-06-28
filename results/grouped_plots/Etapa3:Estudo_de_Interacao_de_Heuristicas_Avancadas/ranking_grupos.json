@@ -1,0 +1,83 @@
+[
+    {
+        "group_name": "Baseline_Fid_Tourn_NSGA_Single_Cnot_AdaptRate",
+        "mean_elite_seed": 0.13876566832029813,
+        "std_elite_seed": 0.0769362475699357,
+        "mean_variance_across_seeds": 0.003049830482373,
+        "best_individual_overall": 0.08018812072735607,
+        "num_seeds": 4,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Baseline_Fid_Tourn_NSGA_Multi_Default",
+        "mean_elite_seed": 0.1404032958644085,
+        "std_elite_seed": 0.08131645045088413,
+        "mean_variance_across_seeds": 0.0028140862395897165,
+        "best_individual_overall": 0.04102337376044801,
+        "num_seeds": 4,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Baseline_Fid_Tourn_NSGA_Multi_Default_AdapRate",
+        "mean_elite_seed": 0.1577914369360485,
+        "std_elite_seed": 0.08342981446151519,
+        "mean_variance_across_seeds": 0.004378900699295,
+        "best_individual_overall": 0.06375159948683987,
+        "num_seeds": 4,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Baseline_Fid_Tourn_Tourn_Single_StepSize",
+        "mean_elite_seed": 0.1584720675035787,
+        "std_elite_seed": 0.08504785583227682,
+        "mean_variance_across_seeds": 0.0004142181355885563,
+        "best_individual_overall": 0.04565669871267132,
+        "num_seeds": 4,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Baseline_Fid_Tourn_NSGA_Single_Cnot",
+        "mean_elite_seed": 0.19306866199471964,
+        "std_elite_seed": 0.10820147730561534,
+        "mean_variance_across_seeds": 0.001668530893627789,
+        "best_individual_overall": 0.07562625810484105,
+        "num_seeds": 4,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Baseline_Fid_Tourn_NSGA_Multi_Default_FitShar",
+        "mean_elite_seed": 0.19857696720978849,
+        "std_elite_seed": 0.061734126447653866,
+        "mean_variance_across_seeds": 0.012734171205592443,
+        "best_individual_overall": 0.12174269730502411,
+        "num_seeds": 4,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Baseline_Fid_Tourn_Tourn_Single",
+        "mean_elite_seed": 0.19874180605242736,
+        "std_elite_seed": 0.10753104157756521,
+        "mean_variance_across_seeds": 0.00037278512952561104,
+        "best_individual_overall": 0.057663328549514004,
+        "num_seeds": 4,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Baseline_Fid_Tourn_NSGA_Multi_Default_BandMutat",
+        "mean_elite_seed": 0.20051290867042024,
+        "std_elite_seed": 0.111902852221459,
+        "mean_variance_across_seeds": 0.0015629019157514805,
+        "best_individual_overall": 0.08611799730397456,
+        "num_seeds": 4,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Baseline_Fid_Tourn_NSGA_Multi_Default_AdapRate+BandMutat+FitShar",
+        "mean_elite_seed": 0.2465874809944104,
+        "std_elite_seed": 0.057067213737597274,
+        "mean_variance_across_seeds": 0.00294914088565115,
+        "best_individual_overall": 0.14418397788116277,
+        "num_seeds": 4,
+        "elitism_size": 12
+    }
+]

@@ -1,0 +1,56 @@
+[
+    {
+        "group_name": "Exp_4Phases_DeepRouter_QFT",
+        "mean_elite_seed": 0.040872395833333366,
+        "std_elite_seed": 0.008783842971753894,
+        "mean_variance_across_seeds": 0.015502208864000095,
+        "best_individual_overall": 0.022460937500000014,
+        "num_seeds": 9,
+        "elitism_size": 25
+    },
+    {
+        "group_name": "Exp_3Phases_Masterpiece_HighElite_QFT",
+        "mean_elite_seed": 0.05641927083333335,
+        "std_elite_seed": 0.030221126960405416,
+        "mean_variance_across_seeds": 0.01409629719712998,
+        "best_individual_overall": 0.022460937500000097,
+        "num_seeds": 9,
+        "elitism_size": 25
+    },
+    {
+        "group_name": "Exp_2Phases_BloatAndPolish_W",
+        "mean_elite_seed": 0.21756998697916674,
+        "std_elite_seed": 0.0697821762502579,
+        "mean_variance_across_seeds": 0.010262326862335202,
+        "best_individual_overall": 0.09765625000000006,
+        "num_seeds": 8,
+        "elitism_size": 12
+    },
+    {
+        "group_name": "Exp_3Phases_ContinuousSculptor_W",
+        "mean_elite_seed": 0.23438946759259258,
+        "std_elite_seed": 0.07588244798283002,
+        "mean_variance_across_seeds": 0.007910519914415147,
+        "best_individual_overall": 0.14453125000000006,
+        "num_seeds": 9,
+        "elitism_size": 15
+    },
+    {
+        "group_name": "Exp_2Phases_EntanglementPreserver_GHZ",
+        "mean_elite_seed": 0.33717013888888886,
+        "std_elite_seed": 0.19091452934180916,
+        "mean_variance_across_seeds": 0.00068925112745497,
+        "best_individual_overall": 0.02734374999999989,
+        "num_seeds": 9,
+        "elitism_size": 25
+    },
+    {
+        "group_name": "Exp_2Phases_DiscreteSearch_GHZ",
+        "mean_elite_seed": 0.462005615234375,
+        "std_elite_seed": 0.10052369330674489,
+        "mean_variance_across_seeds": 0.00015397715759277346,
+        "best_individual_overall": 0.1738281249999999,
+        "num_seeds": 8,
+        "elitism_size": 12
+    }
+]

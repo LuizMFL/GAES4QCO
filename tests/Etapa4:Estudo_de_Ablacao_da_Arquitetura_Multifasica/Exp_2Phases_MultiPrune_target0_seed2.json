@@ -1,0 +1,55 @@
+{
+    "seed": 102,
+    "seed_target": 10000,
+    "resume_from_checkpoint": true,
+    "num_qubits": 4,
+    "max_depth": 40,
+    "min_depth": 1,
+    "target_depth": 40,
+    "population_size": 250,
+    "elitism_size": 12,
+    "allowed_gates": [
+        "IGate",
+        "HGate",
+        "RXGate",
+        "RYGate",
+        "RZGate",
+        "CXGate"
+    ],
+    "crossover_rate": 0.8,
+    "mutation_rate": 0.25,
+    "min_crossover_rate": 0.6,
+    "max_crossover_rate": 0.95,
+    "min_mutation_rate": 0.05,
+    "max_mutation_rate": 0.4,
+    "tournament_size": 3,
+    "phases": [
+        {
+            "generations": 500,
+            "use_stepsize": false,
+            "fitness_evaluator": "DEFAULT",
+            "use_adaptive_rates": false,
+            "use_bandit_mutation": false,
+            "use_fitness_sharing": false,
+            "parent_selection": "TOURNAMENT",
+            "survivor_selection": "NSGA2",
+            "crossover_strategy": "MULTIPOINT",
+            "fidelity_threshold_stop": 0.99999,
+            "result_filepath": "results/pha=0_FD_mu_to_ns_FX_RD_NR_NL/85e34ba5_results.json"
+        },
+        {
+            "generations": 500,
+            "use_stepsize": false,
+            "fitness_evaluator": "CNOT_PENALTY",
+            "use_adaptive_rates": true,
+            "use_bandit_mutation": false,
+            "use_fitness_sharing": false,
+            "parent_selection": "TOURNAMENT",
+            "survivor_selection": "NSGA2",
+            "crossover_strategy": "MULTIPOINT",
+            "fidelity_threshold_stop": 0.99999,
+            "result_filepath": "results/pha=0_FD_mu_to_ns_FX_RD_NR_NL/pha=1_CP_mu_to_ns_AD_RD_NR_NL/04dfa1c4_results.json"
+        }
+    ],
+    "filename_target_circuit": "results/target_circuits/target_seed_10000.json"
+}
