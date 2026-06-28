@@ -2,3 +2,9 @@
 .ipynb_checkpoints
 __pycache__
 .idea
+
+*.log
+*.txt
+*.sh
+/results/pha=0_*
+/gaes4qco.egg-info
